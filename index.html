@@ -752,6 +752,7 @@
 
 <!-- PDF generation for the Daily Report download button. -->
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 
 <script>
 // Simple app-open password gate. Note: this is a UI deterrent, not real
@@ -2767,8 +2768,19 @@
   }
 
   // ================= DAILY REPORT (PDF download) =================
-  function buildDailyReportLines(){
-    var todayStr = new Date().toDateString();
+  var REPORT_COLORS = {
+    primary: [37, 99, 235],
+    green: [22, 163, 74],
+    red: [220, 38, 38],
+    amber: [217, 119, 6],
+    muted: [107, 114, 128],
+    text: [31, 41, 55],
+    border: [223, 227, 232]
+  };
+
+  function buildDailyReportData(){
+    var now = new Date();
+    var todayStr = now.toDateString();
     var todaySales = state.sales.filter(function(s){ return new Date(s.date).toDateString() === todayStr; });
     var revenue = todaySales.reduce(function(sum,s){ return sum+s.grand; }, 0);
     var cash = 0, card = 0, wallet = 0;
@@ -2797,68 +2809,178 @@
 
     var todayShifts = state.shifts.filter(function(sh){ return new Date(sh.end).toDateString() === todayStr; });
 
-    var lines = [];
-    lines.push(state.settings.storeName + " — Daily Report");
-    lines.push(new Date().toLocaleDateString());
-    lines.push("");
-    lines.push("SALES SUMMARY");
-    lines.push("Revenue: " + money(revenue));
-    lines.push("Transactions: " + todaySales.length);
-    lines.push("  Cash: " + money(cash));
-    lines.push("  Card: " + money(card));
-    lines.push("  Mobile Wallet: " + money(wallet));
-    if(refundTotal > 0) lines.push("Refunds issued: " + money(refundTotal) + " (" + todayRefunds.length + ")");
-    lines.push("");
+    return {
+      storeName: state.settings.storeName || "Store",
+      dateLabel: now.toLocaleDateString(undefined, { weekday:"long", year:"numeric", month:"long", day:"numeric" }),
+      generatedLabel: now.toLocaleTimeString(),
+      revenue: revenue, transactions: todaySales.length,
+      cash: cash, card: card, wallet: wallet,
+      refundTotal: refundTotal, refundCount: todayRefunds.length,
+      topItems: topItems,
+      lowStock: lowStock.slice(0,10), outStock: outStock.slice(0,10),
+      shifts: todayShifts
+    };
+  }
 
-    lines.push("TOP ITEMS TODAY");
-    if(topItems.length === 0){
-      lines.push("No sales yet today.");
+  function sectionTitle(doc, text, y, marginX, pageWidth){
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor.apply(doc, REPORT_COLORS.primary);
+    doc.text(text, marginX, y);
+    doc.setDrawColor.apply(doc, REPORT_COLORS.border);
+    doc.setLineWidth(1);
+    doc.line(marginX, y + 6, pageWidth - marginX, y + 6);
+    return y + 26;
+  }
+
+  function emptyNote(doc, text, y, marginX){
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(10);
+    doc.setTextColor.apply(doc, REPORT_COLORS.muted);
+    doc.text(text, marginX, y);
+    return y + 24;
+  }
+
+  function renderDailyReportPdf(data){
+    var doc = new jspdf.jsPDF({ unit: "pt", format: "a4" });
+    var pageWidth = doc.internal.pageSize.getWidth();
+    var pageHeight = doc.internal.pageSize.getHeight();
+    var marginX = 40;
+    var contentWidth = pageWidth - marginX * 2;
+
+    // ---- header banner ----
+    doc.setFillColor.apply(doc, REPORT_COLORS.primary);
+    doc.rect(0, 0, pageWidth, 82, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.text(data.storeName, marginX, 36);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text("Daily Report", marginX, 56);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text(data.dateLabel, pageWidth - marginX, 36, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text("Generated at " + data.generatedLabel, pageWidth - marginX, 52, { align: "right" });
+
+    var y = 112;
+
+    // ---- sales summary ----
+    y = sectionTitle(doc, "Sales Summary", y, marginX, pageWidth);
+    var summaryRows = [
+      ["Revenue", money(data.revenue)],
+      ["Transactions", String(data.transactions)],
+      ["Cash", money(data.cash)],
+      ["Card", money(data.card)],
+      ["Mobile Wallet", money(data.wallet)]
+    ];
+    if(data.refundTotal > 0) summaryRows.push(["Refunds Issued", money(data.refundTotal) + " (" + data.refundCount + ")"]);
+    doc.autoTable({
+      startY: y,
+      margin: { left: marginX, right: marginX },
+      head: [["Metric", "Value"]],
+      body: summaryRows,
+      theme: "grid",
+      styles: { font: "helvetica", fontSize: 10, textColor: REPORT_COLORS.text, cellPadding: 6, lineColor: REPORT_COLORS.border },
+      headStyles: { fillColor: REPORT_COLORS.primary, textColor: 255, fontStyle: "bold" },
+      columnStyles: { 0: { cellWidth: contentWidth * 0.6 }, 1: { cellWidth: contentWidth * 0.4, halign: "right" } }
+    });
+    y = doc.lastAutoTable.finalY + 34;
+
+    // ---- top items ----
+    y = sectionTitle(doc, "Top Items Today", y, marginX, pageWidth);
+    if(data.topItems.length === 0){
+      y = emptyNote(doc, "No sales yet today.", y, marginX);
     } else {
-      topItems.forEach(function(t){ lines.push("  " + t.name + " — " + t.qty + " sold — " + money(t.revenue)); });
+      doc.autoTable({
+        startY: y,
+        margin: { left: marginX, right: marginX },
+        head: [["Item", "Qty Sold", "Revenue"]],
+        body: data.topItems.map(function(t){ return [t.name, String(t.qty), money(t.revenue)]; }),
+        theme: "grid",
+        styles: { font: "helvetica", fontSize: 10, textColor: REPORT_COLORS.text, cellPadding: 6, lineColor: REPORT_COLORS.border },
+        headStyles: { fillColor: REPORT_COLORS.primary, textColor: 255, fontStyle: "bold" },
+        columnStyles: { 1: { halign: "right", cellWidth: contentWidth * 0.2 }, 2: { halign: "right", cellWidth: contentWidth * 0.25 } }
+      });
+      y = doc.lastAutoTable.finalY + 34;
     }
-    lines.push("");
 
-    lines.push("INVENTORY ALERTS");
-    lines.push("Low stock items: " + lowStock.length);
-    lowStock.slice(0,10).forEach(function(it){ lines.push("  " + it.name + " — " + it.stock + " " + (it.unit||"") + " left"); });
-    lines.push("Out of stock items: " + outStock.length);
-    outStock.slice(0,10).forEach(function(it){ lines.push("  " + it.name); });
-    lines.push("");
-
-    lines.push("SHIFTS CLOSED TODAY");
-    if(todayShifts.length === 0){
-      lines.push("No shifts closed today.");
+    // ---- inventory alerts ----
+    y = sectionTitle(doc, "Inventory Alerts", y, marginX, pageWidth);
+    var alertRows = data.lowStock.map(function(it){ return [it.name, "Low Stock", it.stock + " " + (it.unit || "") + " left"]; })
+      .concat(data.outStock.map(function(it){ return [it.name, "Out of Stock", "—"]; }));
+    if(alertRows.length === 0){
+      y = emptyNote(doc, "All items are sufficiently stocked.", y, marginX);
     } else {
-      todayShifts.forEach(function(sh){
-        var diffLabel = Math.abs(sh.difference) < 0.005 ? "matched" : (sh.difference > 0 ? "over by " + money(sh.difference) : "short by " + money(Math.abs(sh.difference)));
-        lines.push("  " + sh.cashierName + " — expected " + money(sh.expectedCash) + ", counted " + money(sh.actualCash) + " (" + diffLabel + ")");
+      doc.autoTable({
+        startY: y,
+        margin: { left: marginX, right: marginX },
+        head: [["Item", "Status", "Stock"]],
+        body: alertRows,
+        theme: "grid",
+        styles: { font: "helvetica", fontSize: 10, textColor: REPORT_COLORS.text, cellPadding: 6, lineColor: REPORT_COLORS.border },
+        headStyles: { fillColor: REPORT_COLORS.primary, textColor: 255, fontStyle: "bold" },
+        columnStyles: { 1: { cellWidth: contentWidth * 0.25 }, 2: { halign: "right", cellWidth: contentWidth * 0.2 } },
+        didParseCell: function(hookData){
+          if(hookData.section === "body" && hookData.column.index === 1){
+            hookData.cell.styles.fontStyle = "bold";
+            hookData.cell.styles.textColor = hookData.cell.raw === "Out of Stock" ? REPORT_COLORS.red : REPORT_COLORS.amber;
+          }
+        }
+      });
+      y = doc.lastAutoTable.finalY + 34;
+    }
+
+    // ---- shifts closed ----
+    y = sectionTitle(doc, "Shifts Closed Today", y, marginX, pageWidth);
+    if(data.shifts.length === 0){
+      y = emptyNote(doc, "No shifts closed today.", y, marginX);
+    } else {
+      doc.autoTable({
+        startY: y,
+        margin: { left: marginX, right: marginX },
+        head: [["Cashier", "Expected", "Counted", "Difference"]],
+        body: data.shifts.map(function(sh){
+          var diff = sh.difference;
+          var diffLabel = Math.abs(diff) < 0.005 ? "Matched" : (diff > 0 ? "Over " + money(diff) : "Short " + money(Math.abs(diff)));
+          return [sh.cashierName, money(sh.expectedCash), money(sh.actualCash), diffLabel];
+        }),
+        theme: "grid",
+        styles: { font: "helvetica", fontSize: 10, textColor: REPORT_COLORS.text, cellPadding: 6, lineColor: REPORT_COLORS.border },
+        headStyles: { fillColor: REPORT_COLORS.primary, textColor: 255, fontStyle: "bold" },
+        columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" } },
+        didParseCell: function(hookData){
+          if(hookData.section === "body" && hookData.column.index === 3){
+            var v = hookData.cell.raw;
+            hookData.cell.styles.fontStyle = "bold";
+            hookData.cell.styles.textColor = v === "Matched" ? REPORT_COLORS.green : (v.indexOf("Short") === 0 ? REPORT_COLORS.red : REPORT_COLORS.amber);
+          }
+        }
       });
     }
-    lines.push("");
-    lines.push("Generated by " + state.settings.storeName + " POS.");
 
-    return lines;
+    // ---- footer on every page ----
+    var pageCount = doc.internal.getNumberOfPages();
+    for(var i = 1; i <= pageCount; i++){
+      doc.setPage(i);
+      doc.setDrawColor.apply(doc, REPORT_COLORS.border);
+      doc.setLineWidth(0.5);
+      doc.line(marginX, pageHeight - 34, pageWidth - marginX, pageHeight - 34);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor.apply(doc, REPORT_COLORS.muted);
+      doc.text(data.storeName + " POS — Daily Report", marginX, pageHeight - 20);
+      doc.text("Page " + i + " of " + pageCount, pageWidth - marginX, pageHeight - 20, { align: "right" });
+    }
+
+    return doc;
   }
 
   document.getElementById("emailReportBtn").addEventListener("click", function(){
-    var lines = buildDailyReportLines();
-    var doc = new jspdf.jsPDF({ unit: "pt", format: "a4" });
-    var pageHeight = doc.internal.pageSize.getHeight();
-    var marginX = 40;
-    var lineHeight = 16;
-    var y = 50;
-
-    doc.setFont("Courier", "normal");
-    doc.setFontSize(11);
-    lines.forEach(function(line){
-      if(y > pageHeight - 40){
-        doc.addPage();
-        y = 50;
-      }
-      doc.text(line, marginX, y);
-      y += lineHeight;
-    });
-
+    var data = buildDailyReportData();
+    var doc = renderDailyReportPdf(data);
     var fileDate = new Date().toISOString().slice(0,10);
     var fileName = (state.settings.storeName || "store").replace(/[^a-z0-9]+/gi, "-") + "-daily-report-" + fileDate + ".pdf";
     doc.save(fileName);
