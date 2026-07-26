@@ -337,13 +337,21 @@ function doPost(e) {
     return jsonOut_({ ok: false, error: "bad request" });
   }
   if (body.token !== SECRET) return jsonOut_({ ok: false, error: "unauthorized" });
+  if (!body.entries && !body.key) return jsonOut_({ ok: false, error: "nothing to write" });
 
-  if (body.entries && body.entries.length) {
-    body.entries.forEach(function (entry) { writeKey_(entry.key, entry.value); });
-  } else if (body.key) {
-    writeKey_(body.key, body.value);
-  } else {
-    return jsonOut_({ ok: false, error: "nothing to write" });
+  // Serialize writes so two overlapping syncs (two devices/cashiers saving at
+  // the same moment) can't race and silently clobber each other's data.
+  var lock = LockService.getScriptLock();
+  var gotLock = lock.tryLock(10000);
+  if (!gotLock) return jsonOut_({ ok: false, error: "busy, try again" });
+  try {
+    if (body.entries && body.entries.length) {
+      body.entries.forEach(function (entry) { writeKey_(entry.key, entry.value); });
+    } else {
+      writeKey_(body.key, body.value);
+    }
+  } finally {
+    lock.releaseLock();
   }
   return jsonOut_({ ok: true });
 }
