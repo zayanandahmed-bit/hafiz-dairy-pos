@@ -859,9 +859,11 @@
         body: JSON.stringify({ token: state.cloud.secret, entries: entries })
       }).then(function(r){ return r.json(); }).then(function(res){
         if(res && res.ok){
-          state.cloud.lastSync = new Date().toISOString();
-          saveCloudConfig();
-          setCloudStatus("synced");
+          // Push succeeded — immediately pull back and re-render, so what's on screen
+          // always reflects exactly what's now in the Sheet (the Sheet is the source of truth).
+          return cloudPullAll().then(function(data){
+            applyCloudData(data);
+          });
         } else {
           setCloudStatus("error", res && res.error);
         }
