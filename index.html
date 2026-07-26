@@ -577,13 +577,13 @@
 
     <div class="panel">
       <div class="flex-between">
-        <h3>Cloud Sync (Google Sheets)</h3>
+        <h3>Cloud Sync (Supabase)</h3>
         <div id="cloudStatus"></div>
       </div>
-      <p class="hint">Connects to a Google Sheet through a small script you deploy yourself (see google-apps-script.gs). Once set up, every change here saves to your Sheet, and any device with this URL+secret can pull the latest data.</p>
+      <p class="hint">Connects to a Supabase database you set up yourself (see supabase-schema.sql). Once set up, every change here saves to your database, and any device with this URL+key can pull the latest data.</p>
       <div class="grid grid-2">
-        <div><label>Apps Script Web App URL</label><input id="setCloudUrl" placeholder="https://script.google.com/macros/s/.../exec"></div>
-        <div><label>Secret Token</label><input id="setCloudSecret" placeholder="the SECRET you set in the script"></div>
+        <div><label>Supabase Project URL</label><input id="setCloudUrl" placeholder="https://xxxxxxxx.supabase.co"></div>
+        <div><label>Supabase Anon Key</label><input id="setCloudSecret" placeholder="the anon public key from Project Settings > API"></div>
       </div>
       <div class="switch-row">
         <span>Enable Cloud Sync</span>
@@ -832,9 +832,20 @@
   }
   function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
-  // ================= CLOUD SYNC (Google Sheets via Apps Script) =================
+  // ================= CLOUD SYNC (Supabase) =================
   function saveCloudConfig(){ localStorage.setItem(LS_CLOUD, JSON.stringify(state.cloud)); }
   function cloudReady(){ return !!(state.cloud.enabled && state.cloud.url && state.cloud.secret); }
+
+  function supabaseUrl(fnName){
+    return state.cloud.url.replace(/\/+$/, "") + "/rest/v1/rpc/" + fnName;
+  }
+  function supabaseHeaders(){
+    return {
+      "Content-Type": "application/json",
+      "apikey": state.cloud.secret,
+      "Authorization": "Bearer " + state.cloud.secret
+    };
+  }
 
   var cloudPushTimer = null;
   function cloudPushAll(){
@@ -843,35 +854,33 @@
     clearTimeout(cloudPushTimer);
     cloudPushTimer = setTimeout(function(){
       setCloudStatus("syncing");
-      var entries = [
-        { key: "items", value: state.items },
-        { key: "sales", value: state.sales },
-        { key: "categories", value: state.categories },
-        { key: "settings", value: state.settings },
-        { key: "suppliers", value: state.suppliers },
-        { key: "purchases", value: state.purchases },
-        { key: "cashiers", value: state.cashiers },
-        { key: "heldSales", value: state.heldSales },
-        { key: "refunds", value: state.refunds },
-        { key: "shifts", value: state.shifts },
-        { key: "activeShift", value: state.activeShift },
-        { key: "receiptCounter", value: parseInt(localStorage.getItem(LS_COUNTER) || "1000", 10) }
-      ];
-      fetch(state.cloud.url, {
+      var payload = {
+        items: state.items,
+        sales: state.sales,
+        categories: state.categories,
+        settings: state.settings,
+        suppliers: state.suppliers,
+        purchases: state.purchases,
+        cashiers: state.cashiers,
+        heldSales: state.heldSales,
+        refunds: state.refunds,
+        shifts: state.shifts,
+        activeShift: state.activeShift,
+        receiptCounter: parseInt(localStorage.getItem(LS_COUNTER) || "1000", 10)
+      };
+      fetch(supabaseUrl("sync_push"), {
         method: "POST",
-        body: JSON.stringify({ token: state.cloud.secret, entries: entries })
-      }).then(function(r){ return r.json(); }).then(function(res){
-        if(res && res.ok){
-          // Push succeeded — immediately pull back and re-render, so what's on screen
-          // always reflects exactly what's now in the Sheet (the Sheet is the source of truth).
-          return cloudPullAll().then(function(data){
-            applyCloudData(data);
-          });
-        } else {
-          setCloudStatus("error", res && res.error);
-        }
+        headers: supabaseHeaders(),
+        body: JSON.stringify({ payload: payload })
+      }).then(function(r){
+        if(!r.ok) return r.text().then(function(t){ throw new Error(t || ("HTTP " + r.status)); });
+        // Push succeeded — immediately pull back and re-render, so what's on screen
+        // always reflects exactly what's now in the database (it's the source of truth).
+        return cloudPullAll().then(function(data){
+          applyCloudData(data);
+        });
       }).catch(function(err){
-        setCloudStatus("error", "offline or unreachable");
+        setCloudStatus("error", err.message || "offline or unreachable");
       });
     }, 500);
   }
@@ -881,13 +890,18 @@
       return Promise.reject(new Error("Cloud Sync isn't configured yet."));
     }
     setCloudStatus("syncing");
-    var url = state.cloud.url + (state.cloud.url.indexOf("?") === -1 ? "?" : "&") + "token=" + encodeURIComponent(state.cloud.secret);
-    return fetch(url).then(function(r){ return r.json(); }).then(function(res){
-      if(!res || !res.ok) throw new Error((res && res.error) || "Could not read cloud data.");
+    return fetch(supabaseUrl("sync_pull"), {
+      method: "POST",
+      headers: supabaseHeaders(),
+      body: JSON.stringify({})
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(t){ throw new Error(t || ("HTTP " + r.status)); });
+      return r.json();
+    }).then(function(data){
       state.cloud.lastSync = new Date().toISOString();
       saveCloudConfig();
       setCloudStatus("synced");
-      return res.data || {};
+      return data || {};
     }).catch(function(err){
       setCloudStatus("error", err.message);
       throw err;
@@ -926,7 +940,18 @@
     if(data.refunds) { state.refunds = data.refunds; localStorage.setItem(LS_REFUNDS, JSON.stringify(state.refunds)); }
     if(data.shifts) { state.shifts = data.shifts; localStorage.setItem(LS_SHIFTS, JSON.stringify(state.shifts)); }
     if(typeof data.activeShift !== "undefined") { state.activeShift = data.activeShift; if(state.activeShift) localStorage.setItem(LS_ACTIVE_SHIFT, JSON.stringify(state.activeShift)); else localStorage.removeItem(LS_ACTIVE_SHIFT); }
-    if(data.settings) { state.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings); localStorage.setItem(LS_SETTINGS, JSON.stringify(state.settings)); }
+    if(data.settings) {
+      // Supabase's settings table is a generic text key/value store, so every
+      // value comes back as a string (e.g. darkMode as "false", which is a
+      // truthy non-empty string in JS) — coerce the known non-string fields back.
+      var incoming = Object.assign({}, data.settings);
+      if(incoming.darkMode !== undefined) incoming.darkMode = (incoming.darkMode === true || incoming.darkMode === "true");
+      ["defaultTax","defaultDiscount","defaultLowStock"].forEach(function(k){
+        if(incoming[k] !== undefined) incoming[k] = parseFloat(incoming[k]) || 0;
+      });
+      state.settings = Object.assign({}, DEFAULT_SETTINGS, incoming);
+      localStorage.setItem(LS_SETTINGS, JSON.stringify(state.settings));
+    }
     if(data.receiptCounter) { localStorage.setItem(LS_COUNTER, String(data.receiptCounter)); }
     refreshEverything();
   }
@@ -2845,11 +2870,11 @@
     readCloudFormIntoState();
     saveCloudConfig();
     if(!state.cloud.url || !state.cloud.secret){
-      toast("Enter the Apps Script URL and secret first.");
+      toast("Enter the Supabase Project URL and Anon Key first.");
       return;
     }
     cloudPullAll().then(function(){
-      toast("Connection works! Your Sheet is reachable.");
+      toast("Connection works! Your database is reachable.");
       loadSettingsForm();
     }).catch(function(err){
       toast("Connection failed: " + err.message);
@@ -2860,7 +2885,7 @@
     readCloudFormIntoState();
     saveCloudConfig();
     if(!state.cloud.url || !state.cloud.secret){
-      toast("Enter the Apps Script URL and secret first.");
+      toast("Enter the Supabase Project URL and Anon Key first.");
       return;
     }
     if(!confirm("This replaces everything on this device with whatever is currently in the cloud. Any local changes not yet synced will be lost. Continue?")) return;
