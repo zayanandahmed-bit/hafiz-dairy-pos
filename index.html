@@ -603,6 +603,7 @@
       <div class="row">
         <button class="btn secondary" id="cloudTestBtn">Test Connection</button>
         <button class="btn secondary" id="cloudSyncNowBtn">Pull Latest From Cloud</button>
+        <button class="btn green" id="cloudPushNowBtn">Update Database Now</button>
         <button class="btn" id="cloudSaveBtn">Save Cloud Settings</button>
       </div>
       <p class="hint" id="cloudLastSync" style="margin-top:8px;"></p>
@@ -899,40 +900,45 @@
   }
 
   var cloudPushTimer = null;
+  function doCloudPushNow(){
+    setCloudStatus("syncing");
+    var payload = {
+      items: state.items,
+      sales: state.sales,
+      categories: state.categories,
+      settings: state.settings,
+      suppliers: state.suppliers,
+      purchases: state.purchases,
+      cashiers: state.cashiers,
+      heldSales: state.heldSales,
+      refunds: state.refunds,
+      shifts: state.shifts,
+      activeShift: state.activeShift,
+      receiptCounter: parseInt(localStorage.getItem(LS_COUNTER) || "1000", 10)
+    };
+    return fetch(supabaseUrl("sync_push"), {
+      method: "POST",
+      headers: supabaseHeaders(),
+      body: JSON.stringify({ payload: payload })
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(t){ throw new Error(t || ("HTTP " + r.status)); });
+      // Push succeeded — immediately pull back and re-render, so what's on screen
+      // always reflects exactly what's now in the database (it's the source of truth).
+      return cloudPullAll().then(function(data){
+        applyCloudData(data);
+      });
+    }).catch(function(err){
+      setCloudStatus("error", err.message || "offline or unreachable");
+      throw err;
+    });
+  }
+
   function cloudPushAll(){
     if(!cloudReady()) return;
     // Debounced so a burst of changes (e.g. a checkout that touches items+sales) collapses into one request.
     clearTimeout(cloudPushTimer);
     cloudPushTimer = setTimeout(function(){
-      setCloudStatus("syncing");
-      var payload = {
-        items: state.items,
-        sales: state.sales,
-        categories: state.categories,
-        settings: state.settings,
-        suppliers: state.suppliers,
-        purchases: state.purchases,
-        cashiers: state.cashiers,
-        heldSales: state.heldSales,
-        refunds: state.refunds,
-        shifts: state.shifts,
-        activeShift: state.activeShift,
-        receiptCounter: parseInt(localStorage.getItem(LS_COUNTER) || "1000", 10)
-      };
-      fetch(supabaseUrl("sync_push"), {
-        method: "POST",
-        headers: supabaseHeaders(),
-        body: JSON.stringify({ payload: payload })
-      }).then(function(r){
-        if(!r.ok) return r.text().then(function(t){ throw new Error(t || ("HTTP " + r.status)); });
-        // Push succeeded — immediately pull back and re-render, so what's on screen
-        // always reflects exactly what's now in the database (it's the source of truth).
-        return cloudPullAll().then(function(data){
-          applyCloudData(data);
-        });
-      }).catch(function(err){
-        setCloudStatus("error", err.message || "offline or unreachable");
-      });
+      doCloudPushNow().catch(function(){ /* status indicator already shows the error */ });
     }, 500);
   }
 
@@ -3078,6 +3084,27 @@
       toast("Pulled the latest data from the cloud.");
     }).catch(function(err){
       toast("Sync failed: " + err.message);
+    });
+  });
+
+  document.getElementById("cloudPushNowBtn").addEventListener("click", function(){
+    readCloudFormIntoState();
+    saveCloudConfig();
+    if(!state.cloud.url || !state.cloud.secret){
+      toast("Enter the Supabase Project URL and Anon Key first.");
+      return;
+    }
+    var btn = document.getElementById("cloudPushNowBtn");
+    var originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Updating…";
+    doCloudPushNow().then(function(){
+      toast("Database updated with everything on this device.");
+    }).catch(function(err){
+      toast("Update failed: " + err.message);
+    }).finally(function(){
+      btn.disabled = false;
+      btn.textContent = originalLabel;
     });
   });
 
