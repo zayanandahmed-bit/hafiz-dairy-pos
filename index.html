@@ -797,29 +797,29 @@
     state.categories = seedCats;
   }
 
-  function saveItems(){ localStorage.setItem(LS_ITEMS, JSON.stringify(state.items)); cloudPush("items", state.items); }
-  function saveSales(){ localStorage.setItem(LS_SALES, JSON.stringify(state.sales)); cloudPush("sales", state.sales); }
-  function saveCats(){ localStorage.setItem(LS_CATS, JSON.stringify(state.categories)); cloudPush("categories", state.categories); }
-  function saveSettings(){ localStorage.setItem(LS_SETTINGS, JSON.stringify(state.settings)); cloudPush("settings", state.settings); }
-  function saveSuppliers(){ localStorage.setItem(LS_SUPPLIERS, JSON.stringify(state.suppliers)); cloudPush("suppliers", state.suppliers); }
-  function savePurchases(){ localStorage.setItem(LS_PURCHASES, JSON.stringify(state.purchases)); cloudPush("purchases", state.purchases); }
-  function saveCashiers(){ localStorage.setItem(LS_CASHIERS, JSON.stringify(state.cashiers)); cloudPush("cashiers", state.cashiers); }
+  function saveItems(){ localStorage.setItem(LS_ITEMS, JSON.stringify(state.items)); cloudPushAll(); }
+  function saveSales(){ localStorage.setItem(LS_SALES, JSON.stringify(state.sales)); cloudPushAll(); }
+  function saveCats(){ localStorage.setItem(LS_CATS, JSON.stringify(state.categories)); cloudPushAll(); }
+  function saveSettings(){ localStorage.setItem(LS_SETTINGS, JSON.stringify(state.settings)); cloudPushAll(); }
+  function saveSuppliers(){ localStorage.setItem(LS_SUPPLIERS, JSON.stringify(state.suppliers)); cloudPushAll(); }
+  function savePurchases(){ localStorage.setItem(LS_PURCHASES, JSON.stringify(state.purchases)); cloudPushAll(); }
+  function saveCashiers(){ localStorage.setItem(LS_CASHIERS, JSON.stringify(state.cashiers)); cloudPushAll(); }
   function saveCurrentCashier(){
     if(state.currentCashierId) localStorage.setItem(LS_CURRENT_CASHIER, state.currentCashierId);
     else localStorage.removeItem(LS_CURRENT_CASHIER);
   }
-  function saveHeld(){ localStorage.setItem(LS_HELD, JSON.stringify(state.heldSales)); cloudPush("heldSales", state.heldSales); }
-  function saveRefunds(){ localStorage.setItem(LS_REFUNDS, JSON.stringify(state.refunds)); cloudPush("refunds", state.refunds); }
-  function saveShifts(){ localStorage.setItem(LS_SHIFTS, JSON.stringify(state.shifts)); cloudPush("shifts", state.shifts); }
+  function saveHeld(){ localStorage.setItem(LS_HELD, JSON.stringify(state.heldSales)); cloudPushAll(); }
+  function saveRefunds(){ localStorage.setItem(LS_REFUNDS, JSON.stringify(state.refunds)); cloudPushAll(); }
+  function saveShifts(){ localStorage.setItem(LS_SHIFTS, JSON.stringify(state.shifts)); cloudPushAll(); }
   function saveActiveShift(){
     if(state.activeShift) localStorage.setItem(LS_ACTIVE_SHIFT, JSON.stringify(state.activeShift));
     else localStorage.removeItem(LS_ACTIVE_SHIFT);
-    cloudPush("activeShift", state.activeShift);
+    cloudPushAll();
   }
   function nextReceiptNo(){
     var n = parseInt(localStorage.getItem(LS_COUNTER) || "1000", 10) + 1;
     localStorage.setItem(LS_COUNTER, String(n));
-    cloudPush("receiptCounter", n);
+    cloudPushAll();
     return n;
   }
   function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -828,16 +828,30 @@
   function saveCloudConfig(){ localStorage.setItem(LS_CLOUD, JSON.stringify(state.cloud)); }
   function cloudReady(){ return !!(state.cloud.enabled && state.cloud.url && state.cloud.secret); }
 
-  var cloudPushTimers = {};
-  function cloudPush(key, value){
+  var cloudPushTimer = null;
+  function cloudPushAll(){
     if(!cloudReady()) return;
-    // Debounce per-key so rapid successive edits (e.g. typing) don't fire a request per keystroke.
-    clearTimeout(cloudPushTimers[key]);
-    cloudPushTimers[key] = setTimeout(function(){
+    // Debounced so a burst of changes (e.g. a checkout that touches items+sales) collapses into one request.
+    clearTimeout(cloudPushTimer);
+    cloudPushTimer = setTimeout(function(){
       setCloudStatus("syncing");
+      var entries = [
+        { key: "items", value: state.items },
+        { key: "sales", value: state.sales },
+        { key: "categories", value: state.categories },
+        { key: "settings", value: state.settings },
+        { key: "suppliers", value: state.suppliers },
+        { key: "purchases", value: state.purchases },
+        { key: "cashiers", value: state.cashiers },
+        { key: "heldSales", value: state.heldSales },
+        { key: "refunds", value: state.refunds },
+        { key: "shifts", value: state.shifts },
+        { key: "activeShift", value: state.activeShift },
+        { key: "receiptCounter", value: parseInt(localStorage.getItem(LS_COUNTER) || "1000", 10) }
+      ];
       fetch(state.cloud.url, {
         method: "POST",
-        body: JSON.stringify({ token: state.cloud.secret, key: key, value: value })
+        body: JSON.stringify({ token: state.cloud.secret, entries: entries })
       }).then(function(r){ return r.json(); }).then(function(res){
         if(res && res.ok){
           state.cloud.lastSync = new Date().toISOString();
@@ -849,7 +863,7 @@
       }).catch(function(err){
         setCloudStatus("error", "offline or unreachable");
       });
-    }, 600);
+    }, 500);
   }
 
   function cloudPullAll(){
