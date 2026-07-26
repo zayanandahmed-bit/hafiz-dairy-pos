@@ -3192,13 +3192,6 @@
   if(cloudReady()){
     cloudPullAll().then(function(data){
       applyCloudData(data);
-      // A brand-new, truly empty database has no categories yet — seed the
-      // default taxonomy (not business data) so the UI has something to
-      // group items under, then push just that up.
-      if(!state.categories || state.categories.length === 0){
-        state.categories = ["Grocery","Dairy","Produce","Bakery","Beverages","Household","Uncategorized"];
-        saveCats();
-      }
       toast("Synced with cloud.");
     }).catch(function(err){
       toast("Couldn't reach the database — check your internet connection: " + err.message);
