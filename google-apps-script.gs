@@ -32,7 +32,10 @@ function getSheet_(name) {
   return ss.getSheetByName(name) || ss.insertSheet(name);
 }
 
-function writeTable_(sheetName, headers, objects) {
+// textColumns: header names that must always stay text (e.g. barcodes, PINs) —
+// without this, Sheets silently converts numeric-looking values to real
+// numbers, which then breaks any code expecting a string (e.g. .toLowerCase()).
+function writeTable_(sheetName, headers, objects, textColumns) {
   var sh = getSheet_(sheetName);
   sh.clearContents();
   sh.appendRow(headers);
@@ -43,6 +46,12 @@ function writeTable_(sheetName, headers, objects) {
       return v === undefined || v === null ? "" : v;
     });
   });
+  if (textColumns && textColumns.length) {
+    textColumns.forEach(function (colName) {
+      var idx = headers.indexOf(colName);
+      if (idx !== -1) sh.getRange(2, idx + 1, rows.length, 1).setNumberFormat("@");
+    });
+  }
   sh.getRange(2, 1, rows.length, headers.length).setValues(rows);
 }
 
@@ -66,13 +75,14 @@ function readTable_(sheetName, headers) {
 
 function num_(v) { var n = Number(v); return isNaN(n) ? 0 : n; }
 function numOrNull_(v) { if (v === "" || v === null || v === undefined) return null; var n = Number(v); return isNaN(n) ? null : n; }
+function str_(v) { return v === null || v === undefined ? "" : String(v); }
 
 // ---------- Items ----------
 var ITEM_HEADERS = ["id", "name", "barcode", "category", "price", "stock", "unit", "lowStock"];
-function writeItems_(items) { writeTable_("Items", ITEM_HEADERS, items); }
+function writeItems_(items) { writeTable_("Items", ITEM_HEADERS, items, ["barcode"]); }
 function readItems_() {
   return readTable_("Items", ITEM_HEADERS).map(function (o) {
-    o.price = num_(o.price); o.stock = num_(o.stock); o.lowStock = num_(o.lowStock);
+    o.price = num_(o.price); o.stock = num_(o.stock); o.lowStock = num_(o.lowStock); o.barcode = str_(o.barcode);
     return o;
   });
 }
@@ -90,13 +100,17 @@ function readCategories_() {
 
 // ---------- Suppliers ----------
 var SUPPLIER_HEADERS = ["id", "name", "contact", "address"];
-function writeSuppliers_(s) { writeTable_("Suppliers", SUPPLIER_HEADERS, s); }
-function readSuppliers_() { return readTable_("Suppliers", SUPPLIER_HEADERS); }
+function writeSuppliers_(s) { writeTable_("Suppliers", SUPPLIER_HEADERS, s, ["contact"]); }
+function readSuppliers_() {
+  return readTable_("Suppliers", SUPPLIER_HEADERS).map(function (o) { o.contact = str_(o.contact); return o; });
+}
 
 // ---------- Cashiers ----------
 var CASHIER_HEADERS = ["id", "name", "pin"];
-function writeCashiers_(c) { writeTable_("Cashiers", CASHIER_HEADERS, c); }
-function readCashiers_() { return readTable_("Cashiers", CASHIER_HEADERS); }
+function writeCashiers_(c) { writeTable_("Cashiers", CASHIER_HEADERS, c, ["pin"]); }
+function readCashiers_() {
+  return readTable_("Cashiers", CASHIER_HEADERS).map(function (o) { o.pin = str_(o.pin); return o; });
+}
 
 // ---------- Purchases (+ proof images kept in a separate tab) ----------
 var PURCHASE_HEADERS = ["id", "date", "supplierId", "supplierName", "itemId", "itemName", "qty", "cost", "total", "notes", "hasProof"];
@@ -143,7 +157,7 @@ function writeSales_(sales) {
       });
     });
   });
-  writeTable_("SaleLines", SALE_LINE_HEADERS, lineRows);
+  writeTable_("SaleLines", SALE_LINE_HEADERS, lineRows, ["barcode"]);
 }
 function readSales_() {
   var sales = readTable_("Sales", SALE_HEADERS);
@@ -158,7 +172,7 @@ function readSales_() {
   lines.forEach(function (l) {
     if (!bySale[l.saleId]) bySale[l.saleId] = [];
     bySale[l.saleId].push({
-      itemId: l.itemId || null, name: l.itemName, barcode: l.barcode || "",
+      itemId: l.itemId || null, name: l.itemName, barcode: str_(l.barcode),
       price: num_(l.price), qty: num_(l.qty), unit: l.unit || "", subtotal: num_(l.subtotal)
     });
   });
@@ -249,6 +263,9 @@ function writeSettings_(settings) {
   sh.appendRow(["setting", "value"]);
   var keys = Object.keys(settings);
   if (keys.length) {
+    // Force the value column to text so things like phone numbers ("0300...")
+    // don't get silently turned into numbers (and lose leading zeros).
+    sh.getRange(2, 2, keys.length, 1).setNumberFormat("@");
     sh.getRange(2, 1, keys.length, 2).setValues(keys.map(function (k) { return [k, settings[k]]; }));
   }
 }
@@ -264,6 +281,7 @@ function readSettings_() {
   if (out.defaultDiscount !== undefined) out.defaultDiscount = num_(out.defaultDiscount);
   if (out.defaultLowStock !== undefined) out.defaultLowStock = num_(out.defaultLowStock);
   if (out.darkMode !== undefined) out.darkMode = (out.darkMode === true || out.darkMode === "TRUE" || out.darkMode === "true");
+  if (out.phone !== undefined) out.phone = str_(out.phone);
   return out;
 }
 
@@ -344,14 +362,21 @@ function doPost(e) {
   var lock = LockService.getScriptLock();
   var gotLock = lock.tryLock(10000);
   if (!gotLock) return jsonOut_({ ok: false, error: "busy, try again" });
+  var failed = [];
   try {
-    if (body.entries && body.entries.length) {
-      body.entries.forEach(function (entry) { writeKey_(entry.key, entry.value); });
-    } else {
-      writeKey_(body.key, body.value);
-    }
+    var toWrite = (body.entries && body.entries.length) ? body.entries : [{ key: body.key, value: body.value }];
+    // Each entry is isolated so one bad/oversized value (e.g. a proof image
+    // Sheets rejects) can't stop every other key in this batch from saving.
+    toWrite.forEach(function (entry) {
+      try {
+        writeKey_(entry.key, entry.value);
+      } catch (err) {
+        failed.push({ key: entry.key, error: String(err) });
+      }
+    });
   } finally {
     lock.releaseLock();
   }
+  if (failed.length) return jsonOut_({ ok: false, error: "some keys failed to save", failed: failed });
   return jsonOut_({ ok: true });
 }

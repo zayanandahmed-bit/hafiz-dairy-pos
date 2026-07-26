@@ -891,13 +891,34 @@
     });
   }
 
+  // Defensive: Google Sheets can silently turn numeric-looking text (barcodes,
+  // PINs, phone numbers) into real numbers. Force these back to strings so
+  // string methods like .toLowerCase() and strict PIN comparisons never break,
+  // regardless of what the Sheet happens to return.
+  function str(v){ return v === null || v === undefined ? "" : String(v); }
+
   function applyCloudData(data){
-    if(data.items) { state.items = data.items; localStorage.setItem(LS_ITEMS, JSON.stringify(state.items)); }
-    if(data.sales) { state.sales = data.sales; localStorage.setItem(LS_SALES, JSON.stringify(state.sales)); }
+    if(data.items) {
+      state.items = data.items.map(function(it){ it.barcode = str(it.barcode); return it; });
+      localStorage.setItem(LS_ITEMS, JSON.stringify(state.items));
+    }
+    if(data.sales) {
+      state.sales = data.sales.map(function(s){
+        (s.lines||[]).forEach(function(l){ l.barcode = str(l.barcode); });
+        return s;
+      });
+      localStorage.setItem(LS_SALES, JSON.stringify(state.sales));
+    }
     if(data.categories) { state.categories = data.categories; localStorage.setItem(LS_CATS, JSON.stringify(state.categories)); }
-    if(data.suppliers) { state.suppliers = data.suppliers; localStorage.setItem(LS_SUPPLIERS, JSON.stringify(state.suppliers)); }
+    if(data.suppliers) {
+      state.suppliers = data.suppliers.map(function(s){ s.contact = str(s.contact); return s; });
+      localStorage.setItem(LS_SUPPLIERS, JSON.stringify(state.suppliers));
+    }
     if(data.purchases) { state.purchases = data.purchases; localStorage.setItem(LS_PURCHASES, JSON.stringify(state.purchases)); }
-    if(data.cashiers) { state.cashiers = data.cashiers; localStorage.setItem(LS_CASHIERS, JSON.stringify(state.cashiers)); }
+    if(data.cashiers) {
+      state.cashiers = data.cashiers.map(function(c){ c.pin = str(c.pin); return c; });
+      localStorage.setItem(LS_CASHIERS, JSON.stringify(state.cashiers));
+    }
     if(data.heldSales) { state.heldSales = data.heldSales; localStorage.setItem(LS_HELD, JSON.stringify(state.heldSales)); }
     if(data.refunds) { state.refunds = data.refunds; localStorage.setItem(LS_REFUNDS, JSON.stringify(state.refunds)); }
     if(data.shifts) { state.shifts = data.shifts; localStorage.setItem(LS_SHIFTS, JSON.stringify(state.shifts)); }
@@ -1376,17 +1397,52 @@
   var pendingProofDataUrl = null;
   var pendingProofName = null;
 
+  // Downscales+recompresses the photo so its base64 form comfortably fits in a
+  // single Google Sheets cell (50,000 char limit) — a raw phone photo can be
+  // several MB, which would otherwise fail (and can break the whole sync batch).
+  function compressImageToDataUrl(file, maxDim, quality){
+    return new Promise(function(resolve, reject){
+      var img = new Image();
+      var reader = new FileReader();
+      reader.onload = function(evt){
+        img.onload = function(){
+          var scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          var w = Math.round(img.width * scale);
+          var h = Math.round(img.height * scale);
+          var canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", quality));
+        };
+        img.onerror = reject;
+        img.src = evt.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
   document.getElementById("purchaseProof").addEventListener("change", function(e){
     var file = e.target.files[0];
     if(!file) return;
-    var reader = new FileReader();
-    reader.onload = function(evt){
-      pendingProofDataUrl = evt.target.result;
+    compressImageToDataUrl(file, 1000, 0.6).then(function(dataUrl){
+      if(dataUrl.length > 45000){
+        return compressImageToDataUrl(file, 700, 0.5).then(function(smaller){ return smaller; });
+      }
+      return dataUrl;
+    }).then(function(dataUrl){
+      if(dataUrl.length > 45000){
+        toast("This image is still too large after compression — try a smaller photo.");
+        document.getElementById("purchaseProof").value = "";
+        return;
+      }
+      pendingProofDataUrl = dataUrl;
       pendingProofName = file.name;
       document.getElementById("proofPreviewImg").src = pendingProofDataUrl;
       document.getElementById("proofPreviewBox").style.display = "block";
-    };
-    reader.readAsDataURL(file);
+    }).catch(function(){
+      toast("Couldn't process that image — try a different file.");
+    });
   });
 
   document.getElementById("removeProofBtn").addEventListener("click", function(){
