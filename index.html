@@ -86,8 +86,8 @@
   .empty{color:var(--muted);text-align:center;padding:20px;font-size:14px;}
   .toast{position:fixed;bottom:20px;right:20px;background:#111827;color:#fff;padding:12px 18px;border-radius:8px;font-size:14px;opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none;z-index:999;}
   .toast.show{opacity:1;transform:translateY(0);}
-  #receiptModal,#cameraModal,#proofModal,#cashierModal,#heldSalesModal,#refundModal,#labelModal,#shiftCloseModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);align-items:center;justify-content:center;z-index:1000;padding:20px;}
-  #receiptModal.show,#cameraModal.show,#proofModal.show,#cashierModal.show,#heldSalesModal.show,#refundModal.show,#labelModal.show,#shiftCloseModal.show{display:flex;}
+  #receiptModal,#cameraModal,#proofModal,#cashierModal,#heldSalesModal,#refundModal,#labelModal,#shiftCloseModal,#scanSheetModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);align-items:center;justify-content:center;z-index:1000;padding:20px;}
+  #receiptModal.show,#cameraModal.show,#proofModal.show,#cashierModal.show,#heldSalesModal.show,#refundModal.show,#labelModal.show,#shiftCloseModal.show,#scanSheetModal.show{display:flex;}
   .cashier-row,.held-row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;}
   .cashier-row.active{border-color:var(--primary);background:rgba(37,99,235,.08);}
   .receipt-paper{background:#fff;color:#111;width:320px;max-height:85vh;overflow-y:auto;padding:16px;font-family:'Courier New',monospace;font-size:12px;border-radius:4px;}
@@ -344,6 +344,16 @@
         <button class="btn" id="addCategoryBtn">Add Category</button>
       </div>
       <div id="categoryChips" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="panel">
+      <div class="flex-between">
+        <div>
+          <h2>Scan Inventory Sheet</h2>
+          <p class="hint">Take or upload a photo of a printed inventory list — you'll get to review and fix everything before it's added.</p>
+        </div>
+        <button class="btn" id="openScanSheetBtn">📷 Scan a Page</button>
+      </div>
     </div>
 
     <div class="panel">
@@ -663,6 +673,44 @@
   </div>
 </div>
 
+<div id="scanSheetModal">
+  <div class="panel" style="width:720px;max-width:95vw;max-height:88vh;overflow-y:auto;">
+    <h2>Scan Inventory Sheet</h2>
+    <p class="hint">Photos of typed/printed lists work best. Nothing gets added to your inventory until you review it below and click Add.</p>
+
+    <input type="file" id="scanSheetFileInput" accept="image/*" capture="environment" style="display:none;">
+    <button class="btn" id="scanSheetChooseBtn">📷 Choose or Take Photo</button>
+    <div id="scanSheetPreviewBox" style="margin-top:10px;display:none;">
+      <img id="scanSheetPreviewImg" src="" style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid var(--border);">
+    </div>
+    <p class="hint" id="scanSheetStatus" style="margin-top:8px;"></p>
+
+    <div id="scanSheetStep2" style="display:none;margin-top:16px;">
+      <div class="flex-between">
+        <h3 style="margin:0;">Review Detected Items</h3>
+        <span class="hint" id="scanSheetRowCount"></span>
+      </div>
+      <p class="hint">Untick anything you don't want, fix any misreads, then add.</p>
+      <datalist id="scanCatList"></datalist>
+      <div style="overflow-x:auto;">
+        <table class="cart-table" id="scanSheetTable">
+          <thead><tr><th></th><th>Item Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Unit</th></tr></thead>
+          <tbody id="scanSheetTbody"></tbody>
+        </table>
+      </div>
+      <details style="margin-top:10px;">
+        <summary class="hint" style="cursor:pointer;">Show raw scanned text</summary>
+        <textarea id="scanSheetRawText" readonly rows="6" style="margin-top:6px;font-family:'Courier New',monospace;font-size:12px;"></textarea>
+      </details>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn secondary" id="scanSheetCancelBtn">Cancel</button>
+      <button class="btn" id="scanSheetAddBtn" style="display:none;">Add Items</button>
+    </div>
+  </div>
+</div>
+
 <div id="heldSalesModal">
   <div class="panel" style="width:420px;max-width:90vw;max-height:80vh;overflow-y:auto;">
     <h2>Held Sales</h2>
@@ -754,6 +802,10 @@
 <!-- PDF generation for the Daily Report download button. -->
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+
+<!-- OCR for the "Scan Inventory Sheet" feature — reads text out of a photo entirely
+     in the browser, no server or API key involved. -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <script>
 // Simple app-open password gate. Note: this is a UI deterrent, not real
@@ -1214,6 +1266,139 @@
     document.getElementById("invSaveBtn").textContent = "Add Item";
     invCancelBtn.style.display = "none";
   }
+
+  // ================= SCAN INVENTORY SHEET (OCR) =================
+  // Best-effort: reads text out of a photo with Tesseract.js (fully client-side,
+  // no server/API key), then guesses name/price/stock per line. OCR on real-world
+  // photos is never perfect, so nothing touches state.items until the user
+  // reviews/edits the guesses in the table and clicks "Add Items".
+  var scanSheetParsedRows = [];
+
+  function parseInventorySheetText(text){
+    var lines = text.split(/\r?\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+    var rows = [];
+    lines.forEach(function(line){
+      // Skip an obvious header row (e.g. "Item | Price | Qty").
+      if(/^(item|name|product|description)\b/i.test(line) && /price|qty|quantity|stock/i.test(line)) return;
+      // Printed tables usually separate columns with a tab or 2+ spaces.
+      var cols = line.split(/\t| {2,}/).map(function(c){ return c.trim(); }).filter(Boolean);
+      if(cols.length < 2){
+        // Fall back to peeling one or two trailing numbers off a single blob of text.
+        var m = line.match(/^(.*?)[\s,]+([\d.]+)(?:[\s,]+([\d.]+))?$/);
+        cols = m ? [m[1], m[2], m[3]].filter(Boolean) : [line];
+      }
+      var name = (cols[0] || "").replace(/[|:\-–]+$/, "").trim();
+      if(!name) return;
+      var nums = cols.slice(1).map(function(c){ return parseFloat(String(c).replace(/[^\d.]/g, "")); }).filter(function(n){ return !isNaN(n); });
+      rows.push({
+        name: name,
+        price: nums.length > 0 ? nums[0] : 0,
+        stock: nums.length > 1 ? nums[1] : 0,
+        unit: "pcs"
+      });
+    });
+    return rows;
+  }
+
+  function renderScanSheetTable(){
+    document.getElementById("scanSheetRowCount").textContent = scanSheetParsedRows.length + " row(s) found";
+    document.getElementById("scanCatList").innerHTML = state.categories.map(function(c){
+      return '<option value="'+escapeHtml(c)+'">';
+    }).join("");
+    document.getElementById("scanSheetTbody").innerHTML = scanSheetParsedRows.map(function(row, i){
+      return '<tr data-idx="'+i+'">' +
+        '<td><input type="checkbox" class="scanRowInclude" checked></td>' +
+        '<td><input class="scanRowName" value="'+escapeHtml(row.name)+'" style="min-width:140px;"></td>' +
+        '<td><input class="scanRowCategory" list="scanCatList" value="'+escapeHtml(state.categories[0] || "Uncategorized")+'" style="width:110px;"></td>' +
+        '<td><input type="number" step="0.01" min="0" class="scanRowPrice" value="'+row.price+'" style="width:80px;"></td>' +
+        '<td><input type="number" step="1" min="0" class="scanRowStock" value="'+row.stock+'" style="width:70px;"></td>' +
+        '<td><input class="scanRowUnit" value="'+row.unit+'" style="width:60px;"></td>' +
+      '</tr>';
+    }).join("");
+  }
+
+  function resetScanSheetModal(){
+    document.getElementById("scanSheetFileInput").value = "";
+    document.getElementById("scanSheetPreviewBox").style.display = "none";
+    document.getElementById("scanSheetStep2").style.display = "none";
+    document.getElementById("scanSheetAddBtn").style.display = "none";
+    document.getElementById("scanSheetStatus").textContent = "";
+    document.getElementById("scanSheetRawText").value = "";
+    scanSheetParsedRows = [];
+  }
+
+  document.getElementById("openScanSheetBtn").addEventListener("click", function(){
+    resetScanSheetModal();
+    document.getElementById("scanSheetModal").classList.add("show");
+  });
+  document.getElementById("scanSheetCancelBtn").addEventListener("click", function(){
+    document.getElementById("scanSheetModal").classList.remove("show");
+  });
+  document.getElementById("scanSheetChooseBtn").addEventListener("click", function(){
+    document.getElementById("scanSheetFileInput").click();
+  });
+
+  document.getElementById("scanSheetFileInput").addEventListener("change", function(e){
+    var file = e.target.files[0];
+    if(!file) return;
+    if(typeof Tesseract === "undefined"){
+      document.getElementById("scanSheetStatus").textContent = "The OCR library hasn't loaded (needs internet the first time) — try again once you're back online.";
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function(evt){
+      document.getElementById("scanSheetPreviewImg").src = evt.target.result;
+      document.getElementById("scanSheetPreviewBox").style.display = "block";
+      document.getElementById("scanSheetStep2").style.display = "none";
+      document.getElementById("scanSheetAddBtn").style.display = "none";
+      document.getElementById("scanSheetStatus").textContent = "Reading text from the photo… this can take a few seconds.";
+
+      Tesseract.recognize(evt.target.result, "eng").then(function(result){
+        var text = (result.data && result.data.text) || "";
+        document.getElementById("scanSheetRawText").value = text;
+        scanSheetParsedRows = parseInventorySheetText(text);
+        if(scanSheetParsedRows.length === 0){
+          document.getElementById("scanSheetStatus").textContent = "Couldn't find any item lines in that photo. Try a clearer, well-lit, straight-on photo.";
+          return;
+        }
+        renderScanSheetTable();
+        document.getElementById("scanSheetStatus").textContent = "Found " + scanSheetParsedRows.length + " possible item(s) below — check them before adding.";
+        document.getElementById("scanSheetStep2").style.display = "block";
+        document.getElementById("scanSheetAddBtn").style.display = "inline-block";
+      }).catch(function(err){
+        document.getElementById("scanSheetStatus").textContent = "Couldn't read that photo: " + err.message;
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.getElementById("scanSheetAddBtn").addEventListener("click", function(){
+    var rows = document.querySelectorAll("#scanSheetTbody tr");
+    var added = 0;
+    rows.forEach(function(tr){
+      if(!tr.querySelector(".scanRowInclude").checked) return;
+      var name = tr.querySelector(".scanRowName").value.trim();
+      if(!name) return;
+      var category = tr.querySelector(".scanRowCategory").value.trim() || "Uncategorized";
+      var price = parseFloat(tr.querySelector(".scanRowPrice").value) || 0;
+      var stock = parseInt(tr.querySelector(".scanRowStock").value, 10) || 0;
+      var unit = tr.querySelector(".scanRowUnit").value.trim() || "pcs";
+      if(state.categories.indexOf(category) === -1) state.categories.push(category);
+      state.items.push({
+        id: uid(), name: name, barcode: "", category: category,
+        price: price, stock: stock, unit: unit, lowStock: state.settings.defaultLowStock || 5
+      });
+      added++;
+    });
+    if(added === 0){ toast("No items were selected to add."); return; }
+    saveCats();
+    saveItems();
+    renderInventory();
+    renderCategoryUI();
+    populatePurchaseItemSelect();
+    document.getElementById("scanSheetModal").classList.remove("show");
+    toast("Added " + added + " item(s) from the scan.");
+  });
 
   function editItem(id){
     var item = state.items.find(function(it){ return it.id === id; });
