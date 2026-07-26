@@ -795,11 +795,14 @@
     collapsedCats: {}
   };
 
-  if(!state.categories){
+  // Reseed defaults if categories is missing OR empty — an empty array can happen
+  // from a bad cloud pull, and without this check it would never self-heal.
+  if(!state.categories || state.categories.length === 0){
     var seedCats = ["Grocery","Dairy","Produce","Bakery","Beverages","Household","Uncategorized"];
     var fromItems = Array.from(new Set(state.items.map(function(it){ return it.category; }).filter(Boolean)));
     fromItems.forEach(function(c){ if(seedCats.indexOf(c) === -1) seedCats.push(c); });
     state.categories = seedCats;
+    localStorage.setItem(LS_CATS, JSON.stringify(state.categories));
   }
 
   function saveItems(){ localStorage.setItem(LS_ITEMS, JSON.stringify(state.items)); cloudPushAll(); }
