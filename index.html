@@ -772,6 +772,11 @@
     darkMode: false
   };
 
+  // Captured before any seeding/defaults touch localStorage, so we can tell a
+  // genuinely brand-new device (safe to pull cloud data into) apart from a
+  // device that already has local data (must never be silently overwritten).
+  var isFreshDevice = localStorage.getItem(LS_ITEMS) === null;
+
   var state = {
     items: JSON.parse(localStorage.getItem(LS_ITEMS) || "[]"),
     sales: JSON.parse(localStorage.getItem(LS_SALES) || "[]"),
@@ -2758,6 +2763,7 @@
       toast("Enter the Apps Script URL and secret first.");
       return;
     }
+    if(!confirm("This replaces everything on this device with whatever is currently in the cloud. Any local changes not yet synced will be lost. Continue?")) return;
     cloudPullAll().then(function(data){
       applyCloudData(data);
       toast("Pulled the latest data from the cloud.");
@@ -2889,12 +2895,20 @@
   loadSettingsForm();
 
   if(cloudReady()){
-    cloudPullAll().then(function(data){
-      applyCloudData(data);
-      toast("Synced with cloud.");
-    }).catch(function(){
-      toast("Couldn't reach cloud — working from the last saved local copy.");
-    });
+    if(isFreshDevice){
+      // Brand-new device with nothing local yet — safe to pull and adopt the cloud's data.
+      cloudPullAll().then(function(data){
+        applyCloudData(data);
+        toast("Synced with cloud.");
+      }).catch(function(){
+        toast("Couldn't reach cloud — working from the last saved local copy.");
+      });
+    } else {
+      // This device already has local data. Never silently overwrite it on load —
+      // push what's here up instead, so the cloud catches up to this device
+      // rather than this device losing data to a stale/empty cloud copy.
+      cloudPushAll();
+    }
   }
 })();
 </script>
