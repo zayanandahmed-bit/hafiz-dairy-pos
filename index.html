@@ -1932,7 +1932,51 @@
     }
   });
 
+  // Some physical barcode scanners don't send an Enter/Tab terminator after the
+  // code (it's a per-scanner setting, not something this app controls). To work
+  // regardless, we detect a scan by typing SPEED instead: a scanner injects the
+  // whole barcode in a few milliseconds, far faster than any human can type. If
+  // a burst of characters lands that fast and then pauses, treat it as a scan
+  // and submit automatically — no Enter required.
+  var scanBurstStart = null;
+  var scanAutoTimer = null;
+
+  function processScanValue(q){
+    q = q.trim();
+    if(!q) return;
+    var exact = state.items.find(function(it){ return it.barcode && it.barcode === q; });
+    if(exact){
+      addToCart(exact.id);
+      scanInput.value = "";
+      searchResults.style.display = "none";
+      scanBurstStart = null;
+      return;
+    }
+    var nameMatches = state.items.filter(function(it){
+      return it.name.toLowerCase().indexOf(q.toLowerCase()) !== -1;
+    });
+    if(nameMatches.length === 1){
+      addToCart(nameMatches[0].id);
+      scanInput.value = "";
+      searchResults.style.display = "none";
+      scanBurstStart = null;
+    } else {
+      toast(nameMatches.length === 0 ? "No item found for \""+q+"\"" : "Multiple matches — pick one from the list.");
+    }
+  }
+
   scanInput.addEventListener("input", function(){
+    if(scanInput.value.length <= 1) scanBurstStart = Date.now();
+    clearTimeout(scanAutoTimer);
+    scanAutoTimer = setTimeout(function(){
+      var val = scanInput.value.trim();
+      if(!scanBurstStart || val.length < 6) return;
+      var avgMsPerChar = (Date.now() - scanBurstStart) / val.length;
+      if(avgMsPerChar <= 35){
+        processScanValue(val);
+      }
+    }, 150);
+
     var q = scanInput.value.trim().toLowerCase();
     if(!q){ searchResults.style.display = "none"; searchResults.innerHTML=""; return; }
     var matches = state.items.filter(function(it){
@@ -1958,25 +2002,8 @@
   scanInput.addEventListener("keydown", function(e){
     if(e.key === "Enter"){
       e.preventDefault();
-      var q = scanInput.value.trim();
-      if(!q) return;
-      var exact = state.items.find(function(it){ return it.barcode && it.barcode === q; });
-      if(exact){
-        addToCart(exact.id);
-        scanInput.value = "";
-        searchResults.style.display = "none";
-        return;
-      }
-      var nameMatches = state.items.filter(function(it){
-        return it.name.toLowerCase().indexOf(q.toLowerCase()) !== -1;
-      });
-      if(nameMatches.length === 1){
-        addToCart(nameMatches[0].id);
-        scanInput.value = "";
-        searchResults.style.display = "none";
-      } else {
-        toast(nameMatches.length === 0 ? "No item found for \""+q+"\"" : "Multiple matches — pick one from the list.");
-      }
+      clearTimeout(scanAutoTimer);
+      processScanValue(scanInput.value);
     }
   });
 
