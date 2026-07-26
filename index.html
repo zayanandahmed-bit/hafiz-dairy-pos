@@ -139,9 +139,27 @@
   .camera-box video{width:340px;max-width:80vw;border-radius:6px;background:#000;}
   .camera-status{color:#fff;font-size:13px;margin-top:8px;min-height:16px;}
   .hint{font-size:12px;color:var(--muted);}
+  #lockScreen{position:fixed;inset:0;z-index:5000;background:#111827;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .lock-card{background:var(--panel);color:var(--text);border-radius:12px;padding:32px 28px;width:320px;max-width:100%;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.4);}
+  .lock-icon{font-size:40px;margin-bottom:8px;}
+  .lock-card h1{font-size:20px;margin:0 0 6px;}
+  .lock-card p{font-size:13px;color:var(--muted);margin:0 0 16px;}
+  .lock-card input{text-align:center;font-size:16px;letter-spacing:2px;}
+  #lockError{color:var(--red);font-size:13px;min-height:18px;margin:10px 0 0;}
 </style>
 </head>
 <body>
+
+<div id="lockScreen">
+  <div class="lock-card">
+    <div class="lock-icon">🛒</div>
+    <h1>Hafiz Dairy</h1>
+    <p>Enter the password to open the POS system.</p>
+    <input type="password" id="lockPasswordInput" placeholder="Password" autocomplete="off">
+    <button id="lockUnlockBtn" class="btn" style="width:100%;margin-top:10px;">Unlock</button>
+    <p id="lockError"></p>
+  </div>
+</div>
 
 <div id="sidebarBackdrop"></div>
 <aside id="sidebar">
@@ -740,6 +758,33 @@
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 
 <script>
+// Simple app-open password gate. Note: this is a UI deterrent, not real
+// security — the password check runs in this same client-side file, so
+// anyone determined enough to view the page source can read it. It stops
+// casual visitors from opening the app, nothing more.
+(function(){
+  "use strict";
+  var LOCK_PASSWORD = "hafizdairy1234";
+  var lockScreen = document.getElementById("lockScreen");
+  var lockInput = document.getElementById("lockPasswordInput");
+  var lockError = document.getElementById("lockError");
+
+  function tryUnlock(){
+    if(lockInput.value === LOCK_PASSWORD){
+      lockScreen.style.display = "none";
+    } else {
+      lockError.textContent = "Incorrect password.";
+      lockInput.value = "";
+      lockInput.focus();
+    }
+  }
+  document.getElementById("lockUnlockBtn").addEventListener("click", tryUnlock);
+  lockInput.addEventListener("keydown", function(e){
+    if(e.key === "Enter") tryUnlock();
+  });
+  lockInput.focus();
+})();
+
 (function(){
   "use strict";
 
