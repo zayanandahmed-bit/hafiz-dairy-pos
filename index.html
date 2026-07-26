@@ -1920,6 +1920,18 @@
   var scanInput = document.getElementById("scanInput");
   var searchResults = document.getElementById("searchResults");
 
+  // Keeps a physical barcode scanner working continuously: a scanner just
+  // "types" into whatever's focused, so if a stray tap/click on the Billing
+  // screen ever steals focus away from the scan box, silently give it back
+  // (unless the user is deliberately typing/clicking into another field).
+  document.getElementById("view-billing").addEventListener("click", function(e){
+    var tag = e.target.tagName;
+    var isFormControl = tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "BUTTON" || e.target.closest("button");
+    if(!isFormControl){
+      scanInput.focus();
+    }
+  });
+
   scanInput.addEventListener("input", function(){
     var q = scanInput.value.trim().toLowerCase();
     if(!q){ searchResults.style.display = "none"; searchResults.innerHTML=""; return; }
