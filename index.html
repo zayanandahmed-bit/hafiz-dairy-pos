@@ -786,20 +786,10 @@
 (function(){
   "use strict";
 
-  var LS_ITEMS = "pos_items";
-  var LS_SALES = "pos_sales";
-  var LS_COUNTER = "pos_receipt_counter";
-  var LS_CATS = "pos_categories";
-  var LS_SETTINGS = "pos_settings";
-  var LS_SUPPLIERS = "pos_suppliers";
-  var LS_PURCHASES = "pos_purchases";
-  var LS_CASHIERS = "pos_cashiers";
-  var LS_CURRENT_CASHIER = "pos_current_cashier";
-  var LS_HELD = "pos_held_sales";
-  var LS_REFUNDS = "pos_refunds";
-  var LS_SHIFTS = "pos_shifts";
-  var LS_ACTIVE_SHIFT = "pos_active_shift";
-  var LS_CLOUD = "pos_cloud_config";
+  // Nothing here touches localStorage — the Supabase database is the only
+  // place this app's data lives. Every load fetches fresh from the cloud and
+  // every change pushes straight back; the browser holds state only in
+  // memory for the current tab.
 
   // Baked-in Supabase connection so every device works out of the box with
   // zero setup — no need to type the URL/key in on each new phone. This is
@@ -824,68 +814,49 @@
     darkMode: false
   };
 
-  // Captured before any seeding/defaults touch localStorage, so we can tell a
-  // genuinely brand-new device (safe to pull cloud data into) apart from a
-  // device that already has local data (must never be silently overwritten).
-  var isFreshDevice = localStorage.getItem(LS_ITEMS) === null;
-
+  // Starts empty every time — there is no local cache to fall back on.
+  // The real data gets hydrated by a Supabase pull right after this file
+  // finishes its initial (empty) render; see the bootstrap at the bottom.
   var state = {
-    items: JSON.parse(localStorage.getItem(LS_ITEMS) || "[]"),
-    sales: JSON.parse(localStorage.getItem(LS_SALES) || "[]"),
-    categories: JSON.parse(localStorage.getItem(LS_CATS) || "null"),
-    suppliers: JSON.parse(localStorage.getItem(LS_SUPPLIERS) || "[]"),
-    purchases: JSON.parse(localStorage.getItem(LS_PURCHASES) || "[]"),
-    cashiers: JSON.parse(localStorage.getItem(LS_CASHIERS) || "[]"),
-    currentCashierId: localStorage.getItem(LS_CURRENT_CASHIER) || null,
-    heldSales: JSON.parse(localStorage.getItem(LS_HELD) || "[]"),
-    refunds: JSON.parse(localStorage.getItem(LS_REFUNDS) || "[]"),
-    shifts: JSON.parse(localStorage.getItem(LS_SHIFTS) || "[]"),
-    activeShift: JSON.parse(localStorage.getItem(LS_ACTIVE_SHIFT) || "null"),
-    settings: Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}")),
-    cloud: Object.assign({ url: BUILT_IN_SUPABASE_URL, secret: BUILT_IN_SUPABASE_ANON_KEY, enabled: true, lastSync: null }, JSON.parse(localStorage.getItem(LS_CLOUD) || "{}")),
+    items: [],
+    sales: [],
+    categories: [],
+    suppliers: [],
+    purchases: [],
+    cashiers: [],
+    currentCashierId: null,
+    heldSales: [],
+    refunds: [],
+    shifts: [],
+    activeShift: null,
+    settings: Object.assign({}, DEFAULT_SETTINGS),
+    cloud: { url: BUILT_IN_SUPABASE_URL, secret: BUILT_IN_SUPABASE_ANON_KEY, enabled: true, lastSync: null },
+    receiptCounter: 1000,
     cart: [],
     collapsedCats: {}
   };
 
-  // Reseed defaults if categories is missing OR empty — an empty array can happen
-  // from a bad cloud pull, and without this check it would never self-heal.
-  if(!state.categories || state.categories.length === 0){
-    var seedCats = ["Grocery","Dairy","Produce","Bakery","Beverages","Household","Uncategorized"];
-    var fromItems = Array.from(new Set(state.items.map(function(it){ return it.category; }).filter(Boolean)));
-    fromItems.forEach(function(c){ if(seedCats.indexOf(c) === -1) seedCats.push(c); });
-    state.categories = seedCats;
-    localStorage.setItem(LS_CATS, JSON.stringify(state.categories));
-  }
-
-  function saveItems(){ localStorage.setItem(LS_ITEMS, JSON.stringify(state.items)); cloudPushAll(); }
-  function saveSales(){ localStorage.setItem(LS_SALES, JSON.stringify(state.sales)); cloudPushAll(); }
-  function saveCats(){ localStorage.setItem(LS_CATS, JSON.stringify(state.categories)); cloudPushAll(); }
-  function saveSettings(){ localStorage.setItem(LS_SETTINGS, JSON.stringify(state.settings)); cloudPushAll(); }
-  function saveSuppliers(){ localStorage.setItem(LS_SUPPLIERS, JSON.stringify(state.suppliers)); cloudPushAll(); }
-  function savePurchases(){ localStorage.setItem(LS_PURCHASES, JSON.stringify(state.purchases)); cloudPushAll(); }
-  function saveCashiers(){ localStorage.setItem(LS_CASHIERS, JSON.stringify(state.cashiers)); cloudPushAll(); }
-  function saveCurrentCashier(){
-    if(state.currentCashierId) localStorage.setItem(LS_CURRENT_CASHIER, state.currentCashierId);
-    else localStorage.removeItem(LS_CURRENT_CASHIER);
-  }
-  function saveHeld(){ localStorage.setItem(LS_HELD, JSON.stringify(state.heldSales)); cloudPushAll(); }
-  function saveRefunds(){ localStorage.setItem(LS_REFUNDS, JSON.stringify(state.refunds)); cloudPushAll(); }
-  function saveShifts(){ localStorage.setItem(LS_SHIFTS, JSON.stringify(state.shifts)); cloudPushAll(); }
-  function saveActiveShift(){
-    if(state.activeShift) localStorage.setItem(LS_ACTIVE_SHIFT, JSON.stringify(state.activeShift));
-    else localStorage.removeItem(LS_ACTIVE_SHIFT);
-    cloudPushAll();
-  }
+  function saveItems(){ cloudPushAll(); }
+  function saveSales(){ cloudPushAll(); }
+  function saveCats(){ cloudPushAll(); }
+  function saveSettings(){ cloudPushAll(); }
+  function saveSuppliers(){ cloudPushAll(); }
+  function savePurchases(){ cloudPushAll(); }
+  function saveCashiers(){ cloudPushAll(); }
+  function saveCurrentCashier(){ /* session-only, kept in memory — not persisted anywhere */ }
+  function saveHeld(){ cloudPushAll(); }
+  function saveRefunds(){ cloudPushAll(); }
+  function saveShifts(){ cloudPushAll(); }
+  function saveActiveShift(){ cloudPushAll(); }
   function nextReceiptNo(){
-    var n = parseInt(localStorage.getItem(LS_COUNTER) || "1000", 10) + 1;
-    localStorage.setItem(LS_COUNTER, String(n));
+    state.receiptCounter = (state.receiptCounter || 1000) + 1;
     cloudPushAll();
-    return n;
+    return state.receiptCounter;
   }
   function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
   // ================= CLOUD SYNC (Supabase) =================
-  function saveCloudConfig(){ localStorage.setItem(LS_CLOUD, JSON.stringify(state.cloud)); }
+  function saveCloudConfig(){ /* session-only override — not persisted anywhere */ }
   function cloudReady(){ return !!(state.cloud.enabled && state.cloud.url && state.cloud.secret); }
 
   function supabaseUrl(fnName){
@@ -914,7 +885,7 @@
       refunds: state.refunds,
       shifts: state.shifts,
       activeShift: state.activeShift,
-      receiptCounter: parseInt(localStorage.getItem(LS_COUNTER) || "1000", 10)
+      receiptCounter: state.receiptCounter || 1000
     };
     return fetch(supabaseUrl("sync_push"), {
       method: "POST",
@@ -940,6 +911,14 @@
     cloudPushTimer = setTimeout(function(){
       doCloudPushNow().catch(function(){ /* status indicator already shows the error */ });
     }, 500);
+  }
+
+  // Skips the debounce entirely — used right after a completed sale so the
+  // database is updated the instant checkout finishes, not ~500ms later.
+  function cloudPushInstant(){
+    if(!cloudReady()) return;
+    clearTimeout(cloudPushTimer);
+    doCloudPushNow().catch(function(){ /* status indicator already shows the error */ });
   }
 
   function cloudPullAll(){
@@ -974,29 +953,25 @@
   function applyCloudData(data){
     if(data.items) {
       state.items = data.items.map(function(it){ it.barcode = str(it.barcode); return it; });
-      localStorage.setItem(LS_ITEMS, JSON.stringify(state.items));
     }
     if(data.sales) {
       state.sales = data.sales.map(function(s){
         (s.lines||[]).forEach(function(l){ l.barcode = str(l.barcode); });
         return s;
       });
-      localStorage.setItem(LS_SALES, JSON.stringify(state.sales));
     }
-    if(data.categories) { state.categories = data.categories; localStorage.setItem(LS_CATS, JSON.stringify(state.categories)); }
+    if(data.categories) { state.categories = data.categories; }
     if(data.suppliers) {
       state.suppliers = data.suppliers.map(function(s){ s.contact = str(s.contact); return s; });
-      localStorage.setItem(LS_SUPPLIERS, JSON.stringify(state.suppliers));
     }
-    if(data.purchases) { state.purchases = data.purchases; localStorage.setItem(LS_PURCHASES, JSON.stringify(state.purchases)); }
+    if(data.purchases) { state.purchases = data.purchases; }
     if(data.cashiers) {
       state.cashiers = data.cashiers.map(function(c){ c.pin = str(c.pin); return c; });
-      localStorage.setItem(LS_CASHIERS, JSON.stringify(state.cashiers));
     }
-    if(data.heldSales) { state.heldSales = data.heldSales; localStorage.setItem(LS_HELD, JSON.stringify(state.heldSales)); }
-    if(data.refunds) { state.refunds = data.refunds; localStorage.setItem(LS_REFUNDS, JSON.stringify(state.refunds)); }
-    if(data.shifts) { state.shifts = data.shifts; localStorage.setItem(LS_SHIFTS, JSON.stringify(state.shifts)); }
-    if(typeof data.activeShift !== "undefined") { state.activeShift = data.activeShift; if(state.activeShift) localStorage.setItem(LS_ACTIVE_SHIFT, JSON.stringify(state.activeShift)); else localStorage.removeItem(LS_ACTIVE_SHIFT); }
+    if(data.heldSales) { state.heldSales = data.heldSales; }
+    if(data.refunds) { state.refunds = data.refunds; }
+    if(data.shifts) { state.shifts = data.shifts; }
+    if(typeof data.activeShift !== "undefined") { state.activeShift = data.activeShift; }
     if(data.settings) {
       // Supabase's settings table is a generic text key/value store, so every
       // value comes back as a string (e.g. darkMode as "false", which is a
@@ -1007,9 +982,8 @@
         if(incoming[k] !== undefined) incoming[k] = parseFloat(incoming[k]) || 0;
       });
       state.settings = Object.assign({}, DEFAULT_SETTINGS, incoming);
-      localStorage.setItem(LS_SETTINGS, JSON.stringify(state.settings));
     }
-    if(data.receiptCounter) { localStorage.setItem(LS_COUNTER, String(data.receiptCounter)); }
+    if(data.receiptCounter) { state.receiptCounter = parseInt(data.receiptCounter, 10) || 1000; }
     refreshEverything();
   }
 
@@ -2268,6 +2242,7 @@
     };
     state.sales.push(sale);
     saveSales();
+    cloudPushInstant();
 
     showReceipt(sale);
 
@@ -3194,27 +3169,9 @@
     findShift: findShift
   };
 
-  // ---------- Seed sample data on first run ----------
-  if(state.items.length === 0){
-    state.items = [
-      {id:uid(), name:"Basmati Rice 5kg", barcode:"8964000111111", category:"Grocery", price:1250, stock:30, unit:"pcs", lowStock:5},
-      {id:uid(), name:"Fresh Milk 1L", barcode:"8964000222222", category:"Dairy", price:220, stock:40, unit:"pcs", lowStock:10},
-      {id:uid(), name:"Loose Tomatoes", barcode:"", category:"Produce", price:80, stock:25, unit:"kg", lowStock:5},
-      {id:uid(), name:"Loose Onions", barcode:"", category:"Produce", price:60, stock:3, unit:"kg", lowStock:5},
-      {id:uid(), name:"Cooking Oil 1L", barcode:"8964000333333", category:"Grocery", price:650, stock:15, unit:"pcs", lowStock:5}
-    ];
-    saveItems();
-    saveCats();
-  }
-  if(state.suppliers.length === 0){
-    state.suppliers = [
-      {id:uid(), name:"City Wholesale Mart", contact:"", address:""},
-      {id:uid(), name:"Local Farms Co-op", contact:"", address:""}
-    ];
-    saveSuppliers();
-  }
-
-  // Initial setup
+  // Initial setup — renders once with empty state, then the cloud pull below
+  // hydrates it with the real data. No demo/sample data is ever invented
+  // here; an empty database just stays empty until you add real items.
   applyTheme();
   document.getElementById("sbStoreName").textContent = state.settings.storeName;
   document.getElementById("discountInput").value = state.settings.defaultDiscount;
@@ -3230,21 +3187,24 @@
   renderShiftHistory();
   loadSettingsForm();
 
+  // The database is the only place this app's data lives, so every load
+  // pulls fresh — there's no local copy to fall back on or to protect.
   if(cloudReady()){
-    if(isFreshDevice){
-      // Brand-new device with nothing local yet — safe to pull and adopt the cloud's data.
-      cloudPullAll().then(function(data){
-        applyCloudData(data);
-        toast("Synced with cloud.");
-      }).catch(function(){
-        toast("Couldn't reach cloud — working from the last saved local copy.");
-      });
-    } else {
-      // This device already has local data. Never silently overwrite it on load —
-      // push what's here up instead, so the cloud catches up to this device
-      // rather than this device losing data to a stale/empty cloud copy.
-      cloudPushAll();
-    }
+    cloudPullAll().then(function(data){
+      applyCloudData(data);
+      // A brand-new, truly empty database has no categories yet — seed the
+      // default taxonomy (not business data) so the UI has something to
+      // group items under, then push just that up.
+      if(!state.categories || state.categories.length === 0){
+        state.categories = ["Grocery","Dairy","Produce","Bakery","Beverages","Household","Uncategorized"];
+        saveCats();
+      }
+      toast("Synced with cloud.");
+    }).catch(function(err){
+      toast("Couldn't reach the database — check your internet connection: " + err.message);
+    });
+  } else {
+    toast("Cloud Sync isn't configured — this app has no other place to store data.");
   }
 })();
 </script>
