@@ -165,6 +165,27 @@ create table if not exists meta (
   value text
 );
 
+-- Running totals, kept up to date by triggers below (not recomputed on
+-- read). "All Time" stats/top-items come from these instead of scanning the
+-- full sales/sale_lines tables — the live scan approach that used to time
+-- out once sales history got into the tens of thousands. Any bounded range
+-- (Today/This Week/This Month/Custom) still scans live, since an indexed
+-- date filter keeps that fast regardless of total table size.
+
+create table if not exists item_sales_totals (
+  item_name text primary key,
+  qty numeric default 0,
+  revenue numeric default 0
+);
+
+create table if not exists sales_overall_totals (
+  key text primary key,
+  count integer default 0,
+  revenue numeric default 0
+);
+insert into sales_overall_totals (key, count, revenue) values ('all', 0, 0)
+on conflict (key) do nothing;
+
 -- ============== LOCK EVERYTHING DOWN ==============
 -- RLS enabled, no policies granted = nobody can touch these tables directly,
 -- not even with the anon key. Only the SECURITY DEFINER functions below can.
@@ -184,6 +205,78 @@ alter table shifts enable row level security;
 alter table active_shift enable row level security;
 alter table settings enable row level security;
 alter table meta enable row level security;
+alter table item_sales_totals enable row level security;
+alter table sales_overall_totals enable row level security;
+
+-- ============== triggers: keep running totals in sync ==============
+-- Fire on every insert/update/delete to sales/sale_lines, regardless of
+-- which function touched them (single append, batch append, full replace,
+-- or clear) — so the totals never need a separate maintenance step.
+
+create or replace function trg_sale_lines_totals()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if TG_OP = 'INSERT' then
+    insert into item_sales_totals (item_name, qty, revenue)
+    values (NEW.item_name, NEW.qty, NEW.subtotal)
+    on conflict (item_name) do update set
+      qty = item_sales_totals.qty + NEW.qty,
+      revenue = item_sales_totals.revenue + NEW.subtotal;
+    return NEW;
+  elsif TG_OP = 'DELETE' then
+    update item_sales_totals set qty = qty - OLD.qty, revenue = revenue - OLD.subtotal
+    where item_name = OLD.item_name;
+    return OLD;
+  end if;
+  return null;
+end;
+$$;
+
+drop trigger if exists sale_lines_totals_trigger on sale_lines;
+create trigger sale_lines_totals_trigger
+after insert or delete on sale_lines
+for each row execute function trg_sale_lines_totals();
+
+create or replace function trg_sales_totals()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if TG_OP = 'INSERT' then
+    update sales_overall_totals set count = count + 1, revenue = revenue + NEW.grand where key = 'all';
+    return NEW;
+  elsif TG_OP = 'DELETE' then
+    update sales_overall_totals set count = count - 1, revenue = revenue - OLD.grand where key = 'all';
+    return OLD;
+  elsif TG_OP = 'UPDATE' then
+    update sales_overall_totals set revenue = revenue - OLD.grand + NEW.grand where key = 'all';
+    return NEW;
+  end if;
+  return null;
+end;
+$$;
+
+drop trigger if exists sales_totals_trigger on sales;
+create trigger sales_totals_trigger
+after insert or update or delete on sales
+for each row execute function trg_sales_totals();
+
+-- One-time (and safely re-runnable) backfill, so totals stay correct even
+-- for rows that existed before these triggers did. Only touches the summary
+-- tables, so it's cheap regardless of when it runs.
+insert into item_sales_totals (item_name, qty, revenue)
+select item_name, sum(qty), sum(subtotal) from sale_lines group by item_name
+on conflict (item_name) do update set qty = excluded.qty, revenue = excluded.revenue;
+
+update sales_overall_totals
+set count = (select count(*) from sales), revenue = (select coalesce(sum(grand), 0) from sales)
+where key = 'all';
 
 -- ============== sync_push: atomic full-replace write ==============
 
@@ -235,8 +328,14 @@ begin
   end if;
 
   if payload ? 'sales' then
-    delete from sale_lines where true;
-    delete from sales where true;
+    -- TRUNCATE (not DELETE) so this doesn't fire the per-row totals triggers
+    -- thousands of times over on a full replace — reset the summary tables
+    -- directly instead, then let the inserts below rebuild them correctly.
+    truncate sale_lines;
+    truncate sales;
+    truncate item_sales_totals;
+    update sales_overall_totals set count = 0, revenue = 0 where key = 'all';
+
     insert into sales (id, receipt_no, date, customer, cashier, payment, cash, subtotal, discount_pct, discount_amt, tax_pct, tax_amt, grand)
     select x->>'id', (x->>'receiptNo')::integer, (x->>'date')::timestamptz, x->>'customer', x->>'cashier', x->>'payment',
            (x->>'cash')::numeric, (x->>'subtotal')::numeric, (x->>'discountPct')::numeric, (x->>'discountAmt')::numeric,
@@ -392,11 +491,14 @@ create index if not exists idx_refund_lines_refund_id on refund_lines(refund_id)
 -- Called whenever the user picks Today/This Week/This Month/Custom Range (or
 -- All Time) in the Dashboard or Sales History — never on app load. Returns:
 --   - sales/refunds: the actual rows for that range (capped at row_limit,
---     most recent first, so an unbounded "All Time" range still responds fast)
---   - totalCount/totalRevenue: exact aggregates over the FULL range regardless
---     of the cap, so stat cards stay accurate even when the row list is capped
---   - topItems: qty/revenue per item over the range, via GROUP BY (not a full
---     row fetch), so it's fast and accurate at any volume
+--     most recent first, so even an unbounded "All Time" row list responds fast)
+--   - totalCount/totalRevenue/topItems: exact, regardless of the row cap —
+--     for a BOUNDED range these come from a live indexed scan (fast no
+--     matter how much total history exists, since the date filter narrows
+--     it); for true "All Time" (both bounds null) they come from the
+--     running-totals tables instead, since aggregating the entire table live
+--     is exactly what timed out once sales history got into the tens of
+--     thousands.
 -- Pass null for range_start/range_end for an unbounded (All Time) range.
 
 create or replace function sync_pull_sales_range(range_start timestamptz, range_end timestamptz, row_limit integer default 500)
@@ -407,7 +509,34 @@ set search_path = public
 as $$
 declare
   result jsonb;
+  is_all_time boolean := (range_start is null and range_end is null);
+  v_total_count integer;
+  v_total_revenue numeric;
+  v_top_items jsonb;
 begin
+  if is_all_time then
+    select count, revenue into v_total_count, v_total_revenue from sales_overall_totals where key = 'all';
+    select coalesce(jsonb_agg(jsonb_build_object('name', item_name, 'qty', qty, 'revenue', revenue) order by qty desc), '[]'::jsonb)
+    into v_top_items
+    from (select * from item_sales_totals order by qty desc limit 20) t;
+  else
+    select count(*) into v_total_count from sales
+    where (range_start is null or date >= range_start) and (range_end is null or date <= range_end);
+
+    select coalesce(sum(grand), 0) into v_total_revenue from sales
+    where (range_start is null or date >= range_start) and (range_end is null or date <= range_end);
+
+    select coalesce(jsonb_agg(t order by (t->>'qty')::numeric desc), '[]'::jsonb) into v_top_items
+    from (
+      select jsonb_build_object('name', sl.item_name, 'qty', sum(sl.qty), 'revenue', sum(sl.subtotal)) as t
+      from sale_lines sl
+      join sales s on s.id = sl.sale_id
+      where (range_start is null or s.date >= range_start) and (range_end is null or s.date <= range_end)
+      group by sl.item_name
+      limit 20
+    ) t;
+  end if;
+
   select jsonb_build_object(
     'sales', coalesce((
       select jsonb_agg(x order by x->>'date' desc) from (
@@ -455,24 +584,9 @@ begin
       ) x
     ), '[]'::jsonb),
 
-    'totalCount', (
-      select count(*) from sales
-      where (range_start is null or date >= range_start) and (range_end is null or date <= range_end)
-    ),
-    'totalRevenue', (
-      select coalesce(sum(grand), 0) from sales
-      where (range_start is null or date >= range_start) and (range_end is null or date <= range_end)
-    ),
-    'topItems', coalesce((
-      select jsonb_agg(t order by (t->>'qty')::numeric desc) from (
-        select jsonb_build_object('name', sl.item_name, 'qty', sum(sl.qty), 'revenue', sum(sl.subtotal)) as t
-        from sale_lines sl
-        join sales s on s.id = sl.sale_id
-        where (range_start is null or s.date >= range_start) and (range_end is null or s.date <= range_end)
-        group by sl.item_name
-        limit 20
-      ) t
-    ), '[]'::jsonb)
+    'totalCount', v_total_count,
+    'totalRevenue', v_total_revenue,
+    'topItems', v_top_items
   ) into result;
   return result;
 end;
@@ -580,8 +694,13 @@ security definer
 set search_path = public
 as $$
 begin
-  delete from sale_lines where true;
-  delete from sales where true;
+  -- TRUNCATE, not DELETE, so wiping a large history doesn't fire the
+  -- per-row totals triggers thousands of times over — reset the summary
+  -- tables directly instead, since there's nothing left to total.
+  truncate sale_lines;
+  truncate sales;
+  truncate item_sales_totals;
+  update sales_overall_totals set count = 0, revenue = 0 where key = 'all';
 end;
 $$;
 
