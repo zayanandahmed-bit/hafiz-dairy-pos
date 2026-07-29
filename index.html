@@ -521,7 +521,7 @@
       <div id="salesEmpty" class="empty" style="display:none;">No sales in this range.</div>
       <div class="row" style="margin-top:10px;align-items:center;">
         <button class="btn secondary small" id="salesPrevPageBtn">← Previous Page</button>
-        <span id="salesPageLabel" style="font-size:13px;color:var(--muted);">Page 1</span>
+        <span id="salesPageLabel" style="font-size:13px;color:var(--muted);">Page 1 of 1</span>
         <button class="btn secondary small" id="salesNextPageBtn">Next Page →</button>
       </div>
     </div>
@@ -2953,7 +2953,8 @@
       state.rangeMeta = { totalCount: data.totalCount||0, totalRevenue: data.totalRevenue||0, topItems: data.topItems||[] };
       salesPageHasMore = !!data.hasMore;
       renderSales();
-      document.getElementById("salesPageLabel").textContent = "Page " + salesPageNumber;
+      var totalPages = Math.max(1, Math.ceil((data.totalCount||0) / SALES_PAGE_SIZE));
+      document.getElementById("salesPageLabel").textContent = "Page " + salesPageNumber + " of " + totalPages;
       document.getElementById("salesPrevPageBtn").disabled = salesPageCursorStack.length === 0;
       document.getElementById("salesNextPageBtn").disabled = !salesPageHasMore;
     }).catch(function(err){ toast("Couldn't load that range: " + err.message); });
