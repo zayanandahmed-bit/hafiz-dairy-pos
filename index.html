@@ -607,43 +607,68 @@
       <div id="shiftHistoryEmpty" class="empty" style="display:none;">No shifts closed yet.</div>
     </div>
 
-    <div class="panel">
-      <div class="flex-between">
-        <h3>Cloud Sync (Supabase)</h3>
-        <div id="cloudStatus"></div>
-      </div>
-      <p class="hint">Connects to a Supabase database you set up yourself (see supabase-schema.sql). Every add, edit, or delete anywhere in the app saves to the database instantly — there's nothing manual to click.</p>
+    <div class="panel" id="ownerGatePanel">
+      <h3 style="margin-top:0;">🔒 Owner Settings</h3>
+      <p class="hint">Cloud Sync credentials and the app login live behind a second password only you know — separate from the shared login everyone uses to open the till.</p>
       <div class="grid grid-2">
-        <div><label>Supabase Project URL</label><input id="setCloudUrl" placeholder="https://xxxxxxxx.supabase.co"></div>
-        <div><label>Supabase Anon Key</label><input id="setCloudSecret" placeholder="the anon public key from Project Settings > API"></div>
+        <div><label>Owner Password</label><input type="password" id="ownerGateInput" autocomplete="off"></div>
+        <div style="display:flex;align-items:flex-end;"><button class="btn" id="ownerGateUnlockBtn" style="width:100%;">Unlock</button></div>
       </div>
-      <div class="switch-row">
-        <span>Enable Cloud Sync</span>
-        <label class="switch"><input type="checkbox" id="setCloudEnabled"><span class="slider"></span></label>
-      </div>
-      <div class="row">
-        <button class="btn secondary" id="cloudTestBtn">Test Connection</button>
-        <button class="btn secondary" id="cloudSyncNowBtn">Pull Latest From Cloud</button>
-        <button class="btn" id="cloudSaveBtn">Save Cloud Settings</button>
-      </div>
-      <p class="hint" id="cloudLastSync" style="margin-top:8px;"></p>
+      <p class="hint" id="ownerGateError" style="margin-top:8px;color:var(--red);"></p>
     </div>
 
-    <div class="panel">
-      <h3>Change Login</h3>
-      <p class="hint">Change the username/password used on this app's login screen. You need the current password to change it.</p>
-      <div class="grid grid-2">
-        <div><label>Current Username</label><input id="loginCurrentUsername" autocomplete="username"></div>
-        <div><label>Current Password</label><input type="password" id="loginCurrentPassword" autocomplete="current-password"></div>
+    <div id="ownerGatedSection" style="display:none;">
+      <div class="panel">
+        <div class="flex-between">
+          <h3>Cloud Sync (Supabase)</h3>
+          <div id="cloudStatus"></div>
+        </div>
+        <p class="hint">Connects to a Supabase database you set up yourself (see supabase-schema.sql). Every add, edit, or delete anywhere in the app saves to the database instantly — there's nothing manual to click.</p>
+        <div class="grid grid-2">
+          <div><label>Supabase Project URL</label><input id="setCloudUrl" placeholder="https://xxxxxxxx.supabase.co"></div>
+          <div><label>Supabase Anon Key</label><input id="setCloudSecret" placeholder="the anon public key from Project Settings > API"></div>
+        </div>
+        <div class="switch-row">
+          <span>Enable Cloud Sync</span>
+          <label class="switch"><input type="checkbox" id="setCloudEnabled"><span class="slider"></span></label>
+        </div>
+        <div class="row">
+          <button class="btn secondary" id="cloudTestBtn">Test Connection</button>
+          <button class="btn secondary" id="cloudSyncNowBtn">Pull Latest From Cloud</button>
+          <button class="btn" id="cloudSaveBtn">Save Cloud Settings</button>
+        </div>
+        <p class="hint" id="cloudLastSync" style="margin-top:8px;"></p>
       </div>
-      <div class="grid grid-2" style="margin-top:8px;">
-        <div><label>New Username</label><input id="loginNewUsername" autocomplete="username"></div>
-        <div><label>New Password</label><input type="password" id="loginNewPassword" autocomplete="new-password"></div>
+
+      <div class="panel">
+        <h3>Change Login</h3>
+        <p class="hint">Change the username/password used on this app's login screen. You need the current password to change it.</p>
+        <div class="grid grid-2">
+          <div><label>Current Username</label><input id="loginCurrentUsername" autocomplete="username"></div>
+          <div><label>Current Password</label><input type="password" id="loginCurrentPassword" autocomplete="current-password"></div>
+        </div>
+        <div class="grid grid-2" style="margin-top:8px;">
+          <div><label>New Username</label><input id="loginNewUsername" autocomplete="username"></div>
+          <div><label>New Password</label><input type="password" id="loginNewPassword" autocomplete="new-password"></div>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <button class="btn secondary" id="changeLoginBtn">Change Login</button>
+        </div>
+        <p class="hint" id="changeLoginStatus" style="margin-top:8px;"></p>
       </div>
-      <div class="row" style="margin-top:10px;">
-        <button class="btn secondary" id="changeLoginBtn">Change Login</button>
+
+      <div class="panel">
+        <h3>Change Owner Password</h3>
+        <p class="hint">This is the password that guards this section — not the app-open login above.</p>
+        <div class="grid grid-2">
+          <div><label>Current Owner Password</label><input type="password" id="ownerPassCurrentInput" autocomplete="current-password"></div>
+          <div><label>New Owner Password</label><input type="password" id="ownerPassNewInput" autocomplete="new-password"></div>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <button class="btn secondary" id="changeOwnerPasswordBtn">Change Owner Password</button>
+        </div>
+        <p class="hint" id="changeOwnerPasswordStatus" style="margin-top:8px;"></p>
       </div>
-      <p class="hint" id="changeLoginStatus" style="margin-top:8px;"></p>
     </div>
 
     <div class="panel">
@@ -3672,6 +3697,66 @@
       }
     }).catch(function(err){
       statusEl.textContent = "Couldn't reach the database: " + err.message;
+    });
+  });
+
+  // ---- Owner-only gate around Cloud Sync + Change Login ----
+  // A second, separate password from the shared app-open login above —
+  // only the owner needs to know this one. Unlocking is per-session only
+  // (resets next time the app loads), it doesn't touch the data functions'
+  // own security, which is unchanged.
+  var OWNER_GATE_APP = "pos-hafiz-dairy";
+  document.getElementById("ownerGateUnlockBtn").addEventListener("click", function(){
+    var pass = document.getElementById("ownerGateInput").value;
+    var errEl = document.getElementById("ownerGateError");
+    if(!pass){ errEl.textContent = "Enter the owner password."; return; }
+    errEl.textContent = "Checking…";
+    fetch(supabaseUrl("verify_admin_settings_password"), {
+      method: "POST",
+      headers: supabaseHeaders(),
+      body: JSON.stringify({ p_app: OWNER_GATE_APP, p_password: pass })
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(t){ throw new Error(t || ("HTTP " + r.status)); });
+      return r.json();
+    }).then(function(ok){
+      if(ok){
+        document.getElementById("ownerGatePanel").style.display = "none";
+        document.getElementById("ownerGatedSection").style.display = "block";
+      } else {
+        errEl.textContent = "Incorrect owner password.";
+        document.getElementById("ownerGateInput").value = "";
+      }
+    }).catch(function(err){
+      errEl.textContent = "Couldn't reach the database: " + err.message;
+    });
+  });
+  document.getElementById("ownerGateInput").addEventListener("keydown", function(e){
+    if(e.key === "Enter") document.getElementById("ownerGateUnlockBtn").click();
+  });
+
+  document.getElementById("changeOwnerPasswordBtn").addEventListener("click", function(){
+    var curPass = document.getElementById("ownerPassCurrentInput").value;
+    var newPass = document.getElementById("ownerPassNewInput").value;
+    var statusEl2 = document.getElementById("changeOwnerPasswordStatus");
+    if(!curPass || !newPass){ statusEl2.textContent = "Fill in both fields."; return; }
+    statusEl2.textContent = "Checking…";
+    fetch(supabaseUrl("set_admin_settings_password"), {
+      method: "POST",
+      headers: supabaseHeaders(),
+      body: JSON.stringify({ p_app: OWNER_GATE_APP, p_current_password: curPass, p_new_password: newPass })
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(t){ throw new Error(t || ("HTTP " + r.status)); });
+      return r.json();
+    }).then(function(ok){
+      if(ok){
+        statusEl2.textContent = "Owner password changed.";
+        document.getElementById("ownerPassCurrentInput").value = "";
+        document.getElementById("ownerPassNewInput").value = "";
+      } else {
+        statusEl2.textContent = "Current owner password is incorrect.";
+      }
+    }).catch(function(err){
+      statusEl2.textContent = "Couldn't reach the database: " + err.message;
     });
   });
 
