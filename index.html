@@ -889,7 +889,16 @@
     cloud: { url: BUILT_IN_SUPABASE_URL, secret: BUILT_IN_SUPABASE_ANON_KEY, enabled: true, lastSync: null },
     receiptCounter: 1000,
     cart: [],
-    collapsedCats: {}
+    collapsedCats: {},
+    // Whichever date range Dashboard/Sales History last fetched — see
+    // loadDashboardRange/loadSalesHistoryRange. rangeMeta holds the server's
+    // exact totals/top-items for that range, since the row-level sales list
+    // itself may be capped for very large ranges.
+    rangeMeta: { totalCount: 0, totalRevenue: 0, topItems: [] },
+    // Snapshot fetched fresh whenever the close-shift modal opens, scoped to
+    // that shift's own start-to-now window — see openShiftCloseModal.
+    shiftWindowSales: [],
+    shiftWindowRefunds: []
   };
 
   function saveItems(){ saveLocalState(); pushDomainInstant("items"); }
@@ -955,14 +964,6 @@
   function savePendingQueue(){
     try{ localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(pendingQueue)); }catch(e){}
   }
-  // So a sale/refund made moments ago (but not yet confirmed pushed) doesn't
-  // visually vanish when this device reconciles with the cloud on load.
-  function mergeWithPending(cloudList, pendingList){
-    var pendingIds = pendingList.map(function(x){ return x.id; });
-    var filtered = (cloudList || []).filter(function(x){ return pendingIds.indexOf(x.id) === -1; });
-    return filtered.concat(pendingList);
-  }
-
   var DIRTY_DOMAINS_KEY = "hafizPos_dirtyDomains_v1";
   var dirtyDomains = {};
   (function loadDirtyDomains(){
@@ -1188,6 +1189,65 @@
     });
   }
 
+  // ================= RANGE-SCOPED SALES/REFUNDS =================
+  // Sales/refunds are never pulled in full — only whatever date range is
+  // currently selected on Dashboard or Sales History, fetched fresh each
+  // time that range changes. This is what keeps the app fast no matter how
+  // much history has piled up: a "This Week" view only ever asks the
+  // database for this week's rows, not the whole table.
+
+  // Turns a range keyword (as used by the Today/This Week/This Month/Custom/
+  // All Time tabs) into concrete start/end bounds for the server to filter on.
+  function computeRangeBounds(range, fromStr, toStr){
+    var now = new Date();
+    if(range === "today"){
+      var start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      var end = new Date(start); end.setDate(end.getDate() + 1);
+      return { start: start.toISOString(), end: end.toISOString() };
+    }
+    if(range === "week"){
+      var weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
+      return { start: weekAgo.toISOString(), end: now.toISOString() };
+    }
+    if(range === "month"){
+      var mStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      var mEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      return { start: mStart.toISOString(), end: mEnd.toISOString() };
+    }
+    if(range === "custom"){
+      var cStart = fromStr ? new Date(fromStr + "T00:00:00") : null;
+      var cEnd = toStr ? new Date(toStr + "T23:59:59.999") : null;
+      return { start: cStart ? cStart.toISOString() : null, end: cEnd ? cEnd.toISOString() : null };
+    }
+    return { start: null, end: null }; // "all"
+  }
+
+  // Raw fetch by explicit ISO bounds (used directly when a precise window is
+  // needed, e.g. a shift's start-to-now, rather than a labeled range tab).
+  function fetchSalesRangeRaw(startISO, endISO, rowLimit){
+    if(!cloudReady()) return Promise.reject(new Error("Cloud Sync isn't configured yet."));
+    setCloudStatus("syncing");
+    return fetch(supabaseUrl("sync_pull_sales_range"), {
+      method: "POST",
+      headers: supabaseHeaders(),
+      body: JSON.stringify({ range_start: startISO, range_end: endISO, row_limit: rowLimit || 500 })
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(t){ throw new Error(t || ("HTTP " + r.status)); });
+      return r.json();
+    }).then(function(data){
+      setCloudStatus("synced");
+      return data || {};
+    }).catch(function(err){
+      setCloudStatus("error", err.message || "offline or unreachable");
+      throw err;
+    });
+  }
+
+  function fetchSalesRangeByLabel(range, fromStr, toStr, rowLimit){
+    var bounds = computeRangeBounds(range, fromStr, toStr);
+    return fetchSalesRangeRaw(bounds.start, bounds.end, rowLimit);
+  }
+
   // Defensive: Google Sheets can silently turn numeric-looking text (barcodes,
   // PINs, phone numbers) into real numbers. Force these back to strings so
   // string methods like .toLowerCase() and strict PIN comparisons never break,
@@ -1297,9 +1357,9 @@
       document.getElementById("viewSubtitle").textContent = meta.sub;
       if(btn.dataset.view === "inventory") renderInventory();
       if(btn.dataset.view === "purchases") renderPurchasesView();
-      if(btn.dataset.view === "sales") renderSales();
+      if(btn.dataset.view === "sales") loadSalesHistoryRange();
       if(btn.dataset.view === "billing") document.getElementById("scanInput").focus();
-      if(btn.dataset.view === "dashboard") renderDashboard();
+      if(btn.dataset.view === "dashboard") loadDashboardRange();
       if(btn.dataset.view === "settings"){ loadSettingsForm(); renderShiftHistory(); }
       document.getElementById("sidebar").classList.remove("open");
       document.getElementById("sidebarBackdrop").classList.remove("show");
@@ -2122,10 +2182,14 @@
   });
 
   // ================= SHIFT RECONCILIATION (Z-REPORT) =================
+  // Uses a dedicated shift-window snapshot (fetched fresh from the server
+  // whenever the close-shift modal opens) rather than state.sales/refunds,
+  // since those now only ever hold whatever range Dashboard/Sales History
+  // last asked for — not necessarily this shift's window.
   function computeShiftSummary(shift){
     var start = new Date(shift.start);
     var end = shift.end ? new Date(shift.end) : new Date();
-    var salesInWindow = state.sales.filter(function(s){
+    var salesInWindow = (state.shiftWindowSales || []).filter(function(s){
       var d = new Date(s.date);
       return s.cashier === shift.cashierName && d >= start && d <= end;
     });
@@ -2136,10 +2200,10 @@
       else walletSales += s.grand;
     });
     var cashRefunds = 0;
-    state.refunds.forEach(function(r){
+    (state.shiftWindowRefunds || []).forEach(function(r){
       var d = new Date(r.date);
       if(d < start || d > end) return;
-      var origSale = state.sales.find(function(s){ return s.id === r.saleId; });
+      var origSale = (state.shiftWindowSales || []).find(function(s){ return s.id === r.saleId; });
       if(origSale && origSale.payment === "Cash") cashRefunds += r.total;
     });
     var expectedCash = (shift.openingCash || 0) + cashSales - cashRefunds;
@@ -2150,9 +2214,7 @@
     };
   }
 
-  function openShiftCloseModal(){
-    if(!state.activeShift){ toast("No active shift to close. Switch to a cashier to start one."); return; }
-    var shift = state.activeShift;
+  function fillShiftCloseModal(shift){
     var summary = computeShiftSummary(shift);
     document.getElementById("shiftCloseCashier").textContent = shift.cashierName;
     document.getElementById("shiftCloseWindow").textContent = "Shift started " + new Date(shift.start).toLocaleString();
@@ -2167,6 +2229,19 @@
     document.getElementById("shiftNotes").value = "";
     document.getElementById("shiftDifferenceBox").textContent = "";
     document.getElementById("shiftCloseModal").classList.add("show");
+  }
+
+  function openShiftCloseModal(){
+    if(!state.activeShift){ toast("No active shift to close. Switch to a cashier to start one."); return; }
+    var shift = state.activeShift;
+    toast("Loading this shift's sales…");
+    fetchSalesRangeRaw(new Date(shift.start).toISOString(), new Date().toISOString(), 5000)
+      .then(function(data){
+        state.shiftWindowSales = (data.sales||[]).map(function(s){ (s.lines||[]).forEach(function(l){ l.barcode = str(l.barcode); }); return s; });
+        state.shiftWindowRefunds = data.refunds || [];
+        fillShiftCloseModal(shift);
+      })
+      .catch(function(err){ toast("Couldn't load this shift's sales: " + err.message); });
   }
 
   document.getElementById("shiftActualCash").addEventListener("input", function(){
@@ -2802,7 +2877,10 @@
   });
 
   // ================= SALES HISTORY =================
-  // Generic date-range test reused by Sales History and Dashboard, each with its own selected range.
+  // Date-range test used only for shifts now (shifts stay fully loaded
+  // locally, since that table is always small) — sales/refunds are fetched
+  // pre-filtered from the server instead, see loadSalesHistoryRange/
+  // loadDashboardRange below.
   function dateInRange(d, range, fromStr, toStr){
     var now = new Date();
     if(range === "today") return d.toDateString() === now.toDateString();
@@ -2832,23 +2910,45 @@
 
   var currentDateRange = "all";
 
+  // Fetches just the selected range's sales/refunds from the database and
+  // re-renders — this is the only thing that ever pulls sales data now.
+  function loadSalesHistoryRange(){
+    var body = document.getElementById("salesBody");
+    if(body) body.innerHTML = '<tr><td colspan="9">Loading…</td></tr>';
+    fetchSalesRangeByLabel(currentDateRange, document.getElementById("customFrom").value, document.getElementById("customTo").value, 500)
+      .then(function(data){
+        state.sales = (data.sales||[]).map(function(s){ (s.lines||[]).forEach(function(l){ l.barcode = str(l.barcode); }); return s; });
+        state.refunds = data.refunds || [];
+        state.rangeMeta = { totalCount: data.totalCount||0, totalRevenue: data.totalRevenue||0, topItems: data.topItems||[] };
+        renderSales();
+      })
+      .catch(function(err){ toast("Couldn't load that range: " + err.message); });
+  }
+
   document.querySelectorAll(".date-tab").forEach(function(btn){
     btn.addEventListener("click", function(){
       document.querySelectorAll(".date-tab").forEach(function(b){ b.classList.remove("active"); });
       btn.classList.add("active");
       currentDateRange = btn.dataset.range;
       document.getElementById("customRangeBox").style.display = currentDateRange === "custom" ? "flex" : "none";
-      if(currentDateRange !== "custom") renderSales();
+      if(currentDateRange !== "custom") loadSalesHistoryRange();
     });
   });
-  document.getElementById("applyCustomRangeBtn").addEventListener("click", renderSales);
+  document.getElementById("applyCustomRangeBtn").addEventListener("click", loadSalesHistoryRange);
   document.getElementById("salesSearch").addEventListener("input", renderSales);
 
-  function saleInDateRange(sale){
-    return dateInRange(new Date(sale.date), currentDateRange, document.getElementById("customFrom").value, document.getElementById("customTo").value);
-  }
-
   var dashDateRange = "week";
+
+  function loadDashboardRange(){
+    fetchSalesRangeByLabel(dashDateRange, document.getElementById("dashCustomFrom").value, document.getElementById("dashCustomTo").value, 500)
+      .then(function(data){
+        state.sales = (data.sales||[]).map(function(s){ (s.lines||[]).forEach(function(l){ l.barcode = str(l.barcode); }); return s; });
+        state.refunds = data.refunds || [];
+        state.rangeMeta = { totalCount: data.totalCount||0, totalRevenue: data.totalRevenue||0, topItems: data.topItems||[] };
+        renderDashboard();
+      })
+      .catch(function(err){ toast("Couldn't load that range: " + err.message); });
+  }
 
   document.querySelectorAll(".dash-date-tab").forEach(function(btn){
     btn.addEventListener("click", function(){
@@ -2856,14 +2956,11 @@
       btn.classList.add("active");
       dashDateRange = btn.dataset.range;
       document.getElementById("dashCustomRangeBox").style.display = dashDateRange === "custom" ? "flex" : "none";
-      if(dashDateRange !== "custom") renderDashboard();
+      if(dashDateRange !== "custom") loadDashboardRange();
     });
   });
-  document.getElementById("dashApplyCustomRangeBtn").addEventListener("click", renderDashboard);
+  document.getElementById("dashApplyCustomRangeBtn").addEventListener("click", loadDashboardRange);
 
-  function saleInDashRange(sale){
-    return dateInRange(new Date(sale.date), dashDateRange, document.getElementById("dashCustomFrom").value, document.getElementById("dashCustomTo").value);
-  }
   function shiftStartInDashRange(shift){
     return dateInRange(new Date(shift.start), dashDateRange, document.getElementById("dashCustomFrom").value, document.getElementById("dashCustomTo").value);
   }
@@ -2872,16 +2969,18 @@
     var body = document.getElementById("salesBody");
     var empty = document.getElementById("salesEmpty");
     var q = document.getElementById("salesSearch").value.trim().toLowerCase();
+    // state.sales already IS this range (fetched from the server) — search
+    // just narrows within whatever rows were loaded for it.
     var filtered = state.sales.filter(function(s){
-      if(!saleInDateRange(s)) return false;
       if(q && String(s.receiptNo).indexOf(q) === -1 && s.customer.toLowerCase().indexOf(q) === -1) return false;
       return true;
     });
     var sorted = filtered.slice().sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
     empty.style.display = sorted.length === 0 ? "block" : "none";
 
-    var totalRevenue = filtered.reduce(function(s,sale){ return s+sale.grand; }, 0);
-    document.getElementById("salesSummary").textContent = sorted.length + " sale(s) shown · Revenue: " + money(totalRevenue) + " (of " + state.sales.length + " total)";
+    var meta = state.rangeMeta || { totalCount: state.sales.length, totalRevenue: 0 };
+    var shownNote = meta.totalCount > state.sales.length ? " (showing most recent " + state.sales.length + ")" : "";
+    document.getElementById("salesSummary").textContent = sorted.length + " sale(s) shown" + shownNote + " · Revenue: " + money(meta.totalRevenue) + " (of " + meta.totalCount + " total in range)";
 
     body.innerHTML = sorted.map(function(sale){
       var d = new Date(sale.date);
@@ -3056,10 +3155,13 @@
       document.getElementById(id).textContent = rangeLabel;
     });
 
-    var rangeSales = state.sales.filter(saleInDashRange);
-    var rangeRevenue = rangeSales.reduce(function(sum,s){ return sum+s.grand; }, 0);
-    document.getElementById("statTodayRevenue").textContent = money(rangeRevenue);
-    document.getElementById("statTodaySales").textContent = rangeSales.length;
+    // state.sales/state.rangeMeta already reflect the selected range —
+    // fetched fresh from the server by loadDashboardRange whenever the range
+    // changes, so revenue/count use the server's exact totals (accurate even
+    // when the row-level list itself is capped for very large ranges).
+    var meta = state.rangeMeta || { totalCount: 0, totalRevenue: 0, topItems: [] };
+    document.getElementById("statTodayRevenue").textContent = money(meta.totalRevenue);
+    document.getElementById("statTodaySales").textContent = meta.totalCount;
 
     var lowStock = state.items.filter(function(it){ return it.stock > 0 && it.stock <= (it.lowStock||0); });
     var outStock = state.items.filter(function(it){ return it.stock <= 0; });
@@ -3070,24 +3172,15 @@
     document.getElementById("statTotalCats").textContent = state.categories.length;
     document.getElementById("statNoBarcode").textContent = state.items.filter(function(it){ return !it.barcode; }).length;
 
-    var salesByItem = {};
-    rangeSales.forEach(function(sale){
-      sale.lines.forEach(function(l){
-        if(!salesByItem[l.name]) salesByItem[l.name] = { qty:0, revenue:0 };
-        salesByItem[l.name].qty += l.qty;
-        salesByItem[l.name].revenue += l.subtotal;
-      });
-    });
-    var topItems = Object.keys(salesByItem).map(function(name){
-      return { name:name, qty:salesByItem[name].qty, revenue:salesByItem[name].revenue };
-    }).sort(function(a,b){ return b.qty - a.qty; }).slice(0,8);
-
+    var topItems = (meta.topItems || []).slice(0, 8);
     document.getElementById("topItemsEmpty").style.display = topItems.length ? "none" : "block";
     document.getElementById("topItemsBody").innerHTML = topItems.map(function(t){
       return "<tr><td>"+escapeHtml(t.name)+"</td><td>"+t.qty+"</td><td>"+money(t.revenue)+"</td></tr>";
     }).join("");
 
-    var recent = rangeSales.slice().sort(function(a,b){ return new Date(b.date)-new Date(a.date); }).slice(0,8);
+    // state.sales is already sorted newest-first by the server and capped at
+    // a sane row limit, so the first 8 are simply the most recent.
+    var recent = state.sales.slice(0, 8);
     document.getElementById("recentSalesEmpty").style.display = recent.length ? "none" : "block";
     document.getElementById("recentSalesBody").innerHTML = recent.map(function(s){
       var d = new Date(s.date);
@@ -3140,10 +3233,13 @@
     border: [223, 227, 232]
   };
 
-  function buildDailyReportData(){
+  // todaySales/todayRefunds are passed in fresh from a dedicated "today"
+  // fetch (see emailReportBtn below) — state.sales no longer reliably holds
+  // today's data, since it only ever holds whatever range Dashboard/Sales
+  // History last requested.
+  function buildDailyReportData(todaySales, todayRefunds){
     var now = new Date();
     var todayStr = now.toDateString();
-    var todaySales = state.sales.filter(function(s){ return new Date(s.date).toDateString() === todayStr; });
     var revenue = todaySales.reduce(function(sum,s){ return sum+s.grand; }, 0);
     var cash = 0, card = 0, wallet = 0;
     todaySales.forEach(function(s){
@@ -3151,7 +3247,6 @@
       else if(s.payment === "Card") card += s.grand;
       else wallet += s.grand;
     });
-    var todayRefunds = state.refunds.filter(function(r){ return new Date(r.date).toDateString() === todayStr; });
     var refundTotal = todayRefunds.reduce(function(s,r){ return s+r.total; }, 0);
 
     var salesByItem = {};
@@ -3341,12 +3436,21 @@
   }
 
   document.getElementById("emailReportBtn").addEventListener("click", function(){
-    var data = buildDailyReportData();
-    var doc = renderDailyReportPdf(data);
-    var fileDate = new Date().toISOString().slice(0,10);
-    var fileName = (state.settings.storeName || "store").replace(/[^a-z0-9]+/gi, "-") + "-daily-report-" + fileDate + ".pdf";
-    doc.save(fileName);
-    toast("Daily report PDF downloaded");
+    var now = new Date();
+    var dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    toast("Loading today's sales…");
+    fetchSalesRangeRaw(dayStart.toISOString(), now.toISOString(), 2000).then(function(rangeData){
+      var todaySales = (rangeData.sales||[]).map(function(s){ (s.lines||[]).forEach(function(l){ l.barcode = str(l.barcode); }); return s; });
+      var todayRefunds = rangeData.refunds || [];
+      var data = buildDailyReportData(todaySales, todayRefunds);
+      var doc = renderDailyReportPdf(data);
+      var fileDate = new Date().toISOString().slice(0,10);
+      var fileName = (state.settings.storeName || "store").replace(/[^a-z0-9]+/gi, "-") + "-daily-report-" + fileDate + ".pdf";
+      doc.save(fileName);
+      toast("Daily report PDF downloaded");
+    }).catch(function(err){
+      toast("Couldn't load today's sales: " + err.message);
+    });
   });
 
   // ================= SETTINGS =================
@@ -3444,22 +3548,53 @@
   });
 
   // ---- Data management ----
+  // Backups need the FULL sales history, not just whatever range Dashboard/
+  // Sales History last loaded — so this pages backward through time (oldest
+  // sale of each page becomes the cursor for the next one) until exhausted,
+  // instead of asking for everything in one request the way the old design
+  // did (which is exactly what used to time out at high volume).
+  function fetchAllSalesForExport(){
+    var allSales = [];
+    var seenIds = {};
+    var PAGE = 3000;
+    function nextPage(cursorEnd){
+      return fetchSalesRangeRaw(null, cursorEnd, PAGE).then(function(data){
+        var page = data.sales || [];
+        var newOnes = page.filter(function(s){ return !seenIds[s.id]; });
+        newOnes.forEach(function(s){ seenIds[s.id] = true; });
+        allSales = allSales.concat(newOnes);
+        if(page.length < PAGE || newOnes.length === 0) return allSales; // reached the beginning
+        var oldest = page[page.length - 1].date;
+        return nextPage(oldest);
+      });
+    }
+    return nextPage(null);
+  }
+
   document.getElementById("exportDataBtn").addEventListener("click", function(){
-    var backup = {
-      items: state.items, sales: state.sales, categories: state.categories,
-      suppliers: state.suppliers, purchases: state.purchases,
-      cashiers: state.cashiers, heldSales: state.heldSales, refunds: state.refunds,
-      shifts: state.shifts, activeShift: state.activeShift,
-      settings: state.settings, exportedAt: new Date().toISOString()
-    };
-    var blob = new Blob([JSON.stringify(backup, null, 2)], {type:"application/json"});
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = "pos-backup-" + new Date().toISOString().slice(0,10) + ".json";
-    a.click();
-    URL.revokeObjectURL(url);
-    toast("Backup exported.");
+    toast("Gathering full sales history for backup…");
+    Promise.all([
+      fetchAllSalesForExport(),
+      fetchSalesRangeRaw(null, null, 20000) // refunds are far fewer than sales in practice; one page covers them
+    ]).then(function(results){
+      var backup = {
+        items: state.items, sales: results[0], categories: state.categories,
+        suppliers: state.suppliers, purchases: state.purchases,
+        cashiers: state.cashiers, heldSales: state.heldSales, refunds: results[1].refunds || [],
+        shifts: state.shifts, activeShift: state.activeShift,
+        settings: state.settings, exportedAt: new Date().toISOString()
+      };
+      var blob = new Blob([JSON.stringify(backup, null, 2)], {type:"application/json"});
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "pos-backup-" + new Date().toISOString().slice(0,10) + ".json";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast("Backup exported (" + backup.sales.length + " sales, " + backup.refunds.length + " refunds).");
+    }).catch(function(err){
+      toast("Backup failed: " + err.message);
+    });
   });
 
   document.getElementById("importDataBtn").addEventListener("click", function(){
@@ -3565,15 +3700,21 @@
       // Every domain the cloud has gets applied UNLESS this device has an
       // unconfirmed local change still pending for it — that keeps a fresh
       // edit from being overwritten by stale cloud data while its push is
-      // still in flight/retrying.
+      // still in flight/retrying. Sales/refunds aren't part of this pull at
+      // all (see sync_pull) — they're fetched on demand by whichever range
+      // Dashboard/Sales History is opened to; only a still-unconfirmed
+      // sale/refund from last session (stuck in the pending queue) shows up
+      // here in the meantime, until it's flushed.
       var merged = {};
       Object.keys(data).forEach(function(k){
-        if(k === "sales" || k === "refunds" || dirtyDomains[k]) return;
+        if(dirtyDomains[k]) return;
         merged[k] = data[k];
       });
-      merged.sales = mergeWithPending(data.sales, pendingQueue.sales.map(function(p){ return p.sale; }));
-      merged.refunds = mergeWithPending(data.refunds, pendingQueue.refunds);
       applyCloudData(merged);
+      if(pendingQueue.sales.length || pendingQueue.refunds.length){
+        state.sales = pendingQueue.sales.map(function(p){ return p.sale; });
+        state.refunds = pendingQueue.refunds.slice();
+      }
       if(!hadLocalData) toast("Synced with cloud.");
     }).catch(function(err){
       toast("Couldn't reach the database — check your internet connection: " + err.message);

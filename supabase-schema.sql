@@ -315,7 +315,11 @@ begin
 end;
 $$;
 
--- ============== sync_pull: read everything back as one JSON object ==============
+-- ============== sync_pull: read everything EXCEPT sales/refunds ==============
+-- Sales and refunds are deliberately left out here — that history can grow
+-- without bound, and building/sending all of it on every app load is what
+-- broke this at high volume. Sales/refunds are fetched separately, scoped to
+-- whatever date range the user has selected, by sync_pull_sales_range below.
 
 create or replace function sync_pull()
 returns jsonb
@@ -348,46 +352,6 @@ begin
       'notes', notes, 'proof', proof_data_url, 'proofName', proof_name
     )) from purchases), '[]'::jsonb),
 
-    'sales', coalesce((
-      select jsonb_agg(
-        jsonb_build_object(
-          'id', s.id, 'receiptNo', s.receipt_no, 'date', s.date, 'customer', s.customer,
-          'cashier', s.cashier, 'payment', s.payment, 'cash', s.cash, 'subtotal', s.subtotal,
-          'discountPct', s.discount_pct, 'discountAmt', s.discount_amt, 'taxPct', s.tax_pct,
-          'taxAmt', s.tax_amt, 'grand', s.grand,
-          'lines', coalesce(sl.lines, '[]'::jsonb)
-        )
-      )
-      from sales s
-      left join (
-        select sale_id, jsonb_agg(jsonb_build_object(
-          'itemId', item_id, 'name', item_name, 'barcode', barcode,
-          'price', price, 'qty', qty, 'unit', unit, 'subtotal', subtotal
-        )) as lines
-        from sale_lines
-        group by sale_id
-      ) sl on sl.sale_id = s.id
-    ), '[]'::jsonb),
-
-    'refunds', coalesce((
-      select jsonb_agg(
-        jsonb_build_object(
-          'id', r.id, 'saleId', r.sale_id, 'receiptNo', r.receipt_no, 'date', r.date,
-          'total', r.total, 'reason', r.reason, 'cashier', r.cashier,
-          'lines', coalesce(rl.lines, '[]'::jsonb)
-        )
-      )
-      from refunds r
-      left join (
-        select refund_id, jsonb_agg(jsonb_build_object(
-          'itemId', item_id, 'name', item_name, 'qty', qty,
-          'price', price, 'refundAmount', refund_amount
-        )) as lines
-        from refund_lines
-        group by refund_id
-      ) rl on rl.refund_id = r.id
-    ), '[]'::jsonb),
-
     'heldSales', coalesce((select jsonb_agg(
       jsonb_build_object(
         'id', h.id, 'date', h.date, 'customer', h.customer, 'discount', h.discount,
@@ -412,6 +376,103 @@ begin
     'settings', coalesce((select jsonb_object_agg(key, value) from settings), '{}'::jsonb),
 
     'receiptCounter', (select (value)::integer from meta where key = 'receiptCounter')
+  ) into result;
+  return result;
+end;
+$$;
+
+-- ============== indexes for range-scoped sales/refunds lookups ==============
+
+create index if not exists idx_sales_date on sales(date);
+create index if not exists idx_refunds_date on refunds(date);
+create index if not exists idx_sale_lines_sale_id on sale_lines(sale_id);
+create index if not exists idx_refund_lines_refund_id on refund_lines(refund_id);
+
+-- ============== sync_pull_sales_range: sales/refunds for one date range ==============
+-- Called whenever the user picks Today/This Week/This Month/Custom Range (or
+-- All Time) in the Dashboard or Sales History — never on app load. Returns:
+--   - sales/refunds: the actual rows for that range (capped at row_limit,
+--     most recent first, so an unbounded "All Time" range still responds fast)
+--   - totalCount/totalRevenue: exact aggregates over the FULL range regardless
+--     of the cap, so stat cards stay accurate even when the row list is capped
+--   - topItems: qty/revenue per item over the range, via GROUP BY (not a full
+--     row fetch), so it's fast and accurate at any volume
+-- Pass null for range_start/range_end for an unbounded (All Time) range.
+
+create or replace function sync_pull_sales_range(range_start timestamptz, range_end timestamptz, row_limit integer default 500)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  result jsonb;
+begin
+  select jsonb_build_object(
+    'sales', coalesce((
+      select jsonb_agg(x order by x->>'date' desc) from (
+        select jsonb_build_object(
+          'id', s.id, 'receiptNo', s.receipt_no, 'date', s.date, 'customer', s.customer,
+          'cashier', s.cashier, 'payment', s.payment, 'cash', s.cash, 'subtotal', s.subtotal,
+          'discountPct', s.discount_pct, 'discountAmt', s.discount_amt, 'taxPct', s.tax_pct,
+          'taxAmt', s.tax_amt, 'grand', s.grand,
+          'lines', coalesce(sl.lines, '[]'::jsonb)
+        ) as x
+        from sales s
+        left join (
+          select sale_id, jsonb_agg(jsonb_build_object(
+            'itemId', item_id, 'name', item_name, 'barcode', barcode,
+            'price', price, 'qty', qty, 'unit', unit, 'subtotal', subtotal
+          )) as lines
+          from sale_lines group by sale_id
+        ) sl on sl.sale_id = s.id
+        where (range_start is null or s.date >= range_start)
+          and (range_end is null or s.date <= range_end)
+        order by s.date desc
+        limit row_limit
+      ) x
+    ), '[]'::jsonb),
+
+    'refunds', coalesce((
+      select jsonb_agg(x order by x->>'date' desc) from (
+        select jsonb_build_object(
+          'id', r.id, 'saleId', r.sale_id, 'receiptNo', r.receipt_no, 'date', r.date,
+          'total', r.total, 'reason', r.reason, 'cashier', r.cashier,
+          'lines', coalesce(rl.lines, '[]'::jsonb)
+        ) as x
+        from refunds r
+        left join (
+          select refund_id, jsonb_agg(jsonb_build_object(
+            'itemId', item_id, 'name', item_name, 'qty', qty,
+            'price', price, 'refundAmount', refund_amount
+          )) as lines
+          from refund_lines group by refund_id
+        ) rl on rl.refund_id = r.id
+        where (range_start is null or r.date >= range_start)
+          and (range_end is null or r.date <= range_end)
+        order by r.date desc
+        limit row_limit
+      ) x
+    ), '[]'::jsonb),
+
+    'totalCount', (
+      select count(*) from sales
+      where (range_start is null or date >= range_start) and (range_end is null or date <= range_end)
+    ),
+    'totalRevenue', (
+      select coalesce(sum(grand), 0) from sales
+      where (range_start is null or date >= range_start) and (range_end is null or date <= range_end)
+    ),
+    'topItems', coalesce((
+      select jsonb_agg(t order by (t->>'qty')::numeric desc) from (
+        select jsonb_build_object('name', sl.item_name, 'qty', sum(sl.qty), 'revenue', sum(sl.subtotal)) as t
+        from sale_lines sl
+        join sales s on s.id = sl.sale_id
+        where (range_start is null or s.date >= range_start) and (range_end is null or s.date <= range_end)
+        group by sl.item_name
+        limit 20
+      ) t
+    ), '[]'::jsonb)
   ) into result;
   return result;
 end;
@@ -680,6 +741,7 @@ $$;
 -- ============== grant access ONLY to the functions above ==============
 
 grant execute on function sync_push(jsonb) to anon;
+grant execute on function sync_pull_sales_range(timestamptz, timestamptz, integer) to anon;
 grant execute on function sync_pull() to anon;
 grant execute on function sync_append_sale(jsonb, integer) to anon;
 grant execute on function sync_append_sales_batch(jsonb) to anon;
