@@ -348,29 +348,45 @@ begin
       'notes', notes, 'proof', proof_data_url, 'proofName', proof_name
     )) from purchases), '[]'::jsonb),
 
-    'sales', coalesce((select jsonb_agg(
-      jsonb_build_object(
-        'id', s.id, 'receiptNo', s.receipt_no, 'date', s.date, 'customer', s.customer,
-        'cashier', s.cashier, 'payment', s.payment, 'cash', s.cash, 'subtotal', s.subtotal,
-        'discountPct', s.discount_pct, 'discountAmt', s.discount_amt, 'taxPct', s.tax_pct,
-        'taxAmt', s.tax_amt, 'grand', s.grand,
-        'lines', coalesce((select jsonb_agg(jsonb_build_object(
-          'itemId', sl.item_id, 'name', sl.item_name, 'barcode', sl.barcode,
-          'price', sl.price, 'qty', sl.qty, 'unit', sl.unit, 'subtotal', sl.subtotal
-        )) from sale_lines sl where sl.sale_id = s.id), '[]'::jsonb)
+    'sales', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', s.id, 'receiptNo', s.receipt_no, 'date', s.date, 'customer', s.customer,
+          'cashier', s.cashier, 'payment', s.payment, 'cash', s.cash, 'subtotal', s.subtotal,
+          'discountPct', s.discount_pct, 'discountAmt', s.discount_amt, 'taxPct', s.tax_pct,
+          'taxAmt', s.tax_amt, 'grand', s.grand,
+          'lines', coalesce(sl.lines, '[]'::jsonb)
+        )
       )
-    ) from sales s), '[]'::jsonb),
+      from sales s
+      left join (
+        select sale_id, jsonb_agg(jsonb_build_object(
+          'itemId', item_id, 'name', item_name, 'barcode', barcode,
+          'price', price, 'qty', qty, 'unit', unit, 'subtotal', subtotal
+        )) as lines
+        from sale_lines
+        group by sale_id
+      ) sl on sl.sale_id = s.id
+    ), '[]'::jsonb),
 
-    'refunds', coalesce((select jsonb_agg(
-      jsonb_build_object(
-        'id', r.id, 'saleId', r.sale_id, 'receiptNo', r.receipt_no, 'date', r.date,
-        'total', r.total, 'reason', r.reason, 'cashier', r.cashier,
-        'lines', coalesce((select jsonb_agg(jsonb_build_object(
-          'itemId', rl.item_id, 'name', rl.item_name, 'qty', rl.qty,
-          'price', rl.price, 'refundAmount', rl.refund_amount
-        )) from refund_lines rl where rl.refund_id = r.id), '[]'::jsonb)
+    'refunds', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', r.id, 'saleId', r.sale_id, 'receiptNo', r.receipt_no, 'date', r.date,
+          'total', r.total, 'reason', r.reason, 'cashier', r.cashier,
+          'lines', coalesce(rl.lines, '[]'::jsonb)
+        )
       )
-    ) from refunds r), '[]'::jsonb),
+      from refunds r
+      left join (
+        select refund_id, jsonb_agg(jsonb_build_object(
+          'itemId', item_id, 'name', item_name, 'qty', qty,
+          'price', price, 'refundAmount', refund_amount
+        )) as lines
+        from refund_lines
+        group by refund_id
+      ) rl on rl.refund_id = r.id
+    ), '[]'::jsonb),
 
     'heldSales', coalesce((select jsonb_agg(
       jsonb_build_object(
@@ -435,6 +451,35 @@ begin
     insert into meta (key, value) values ('receiptCounter', receipt_counter::text)
     on conflict (key) do update set value = excluded.value;
   end if;
+end;
+$$;
+
+-- ============== sync_append_sales_batch: bulk append, no wipe ==============
+-- Set-based insert for many sales at once (e.g. bulk-loading historical data)
+-- without ever deleting the existing table first, unlike sync_push. Callers
+-- should chunk large loads (a few thousand sales per call) to stay under
+-- Supabase's statement timeout — this function itself has no size limit,
+-- the timeout is on how much work fits in one call.
+
+create or replace function sync_append_sales_batch(sales jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into sales (id, receipt_no, date, customer, cashier, payment, cash, subtotal, discount_pct, discount_amt, tax_pct, tax_amt, grand)
+  select x->>'id', (x->>'receiptNo')::integer, (x->>'date')::timestamptz, x->>'customer', x->>'cashier', x->>'payment',
+         (x->>'cash')::numeric, (x->>'subtotal')::numeric, (x->>'discountPct')::numeric, (x->>'discountAmt')::numeric,
+         (x->>'taxPct')::numeric, (x->>'taxAmt')::numeric, (x->>'grand')::numeric
+  from jsonb_array_elements(sales) x
+  on conflict (id) do nothing;
+
+  insert into sale_lines (sale_id, item_id, item_name, barcode, price, qty, unit, subtotal)
+  select s->>'id', l->>'itemId', l->>'name', coalesce(l->>'barcode',''), (l->>'price')::numeric,
+         (l->>'qty')::numeric, coalesce(l->>'unit',''), (l->>'subtotal')::numeric
+  from jsonb_array_elements(sales) s,
+       jsonb_array_elements(coalesce(s->'lines','[]'::jsonb)) l;
 end;
 $$;
 
@@ -637,6 +682,7 @@ $$;
 grant execute on function sync_push(jsonb) to anon;
 grant execute on function sync_pull() to anon;
 grant execute on function sync_append_sale(jsonb, integer) to anon;
+grant execute on function sync_append_sales_batch(jsonb) to anon;
 grant execute on function sync_append_refund(jsonb) to anon;
 grant execute on function sync_clear_sales() to anon;
 grant execute on function sync_replace_items(jsonb) to anon;
