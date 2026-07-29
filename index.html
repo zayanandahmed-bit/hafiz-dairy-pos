@@ -154,9 +154,10 @@
   <div class="lock-card">
     <div class="lock-icon">🛒</div>
     <h1>Hafiz Dairy</h1>
-    <p>Enter the password to open the POS system.</p>
-    <input type="password" id="lockPasswordInput" placeholder="Password" autocomplete="off">
-    <button id="lockUnlockBtn" class="btn" style="width:100%;margin-top:10px;">Unlock</button>
+    <p>Log in to open the POS system.</p>
+    <input type="text" id="lockUsernameInput" placeholder="Username" autocomplete="username" style="margin-bottom:10px;">
+    <input type="password" id="lockPasswordInput" placeholder="Password" autocomplete="current-password">
+    <button id="lockUnlockBtn" class="btn" style="width:100%;margin-top:10px;">Log In</button>
     <p id="lockError"></p>
   </div>
 </div>
@@ -629,6 +630,23 @@
     </div>
 
     <div class="panel">
+      <h3>Change Login</h3>
+      <p class="hint">Change the username/password used on this app's login screen. You need the current password to change it.</p>
+      <div class="grid grid-2">
+        <div><label>Current Username</label><input id="loginCurrentUsername" autocomplete="username"></div>
+        <div><label>Current Password</label><input type="password" id="loginCurrentPassword" autocomplete="current-password"></div>
+      </div>
+      <div class="grid grid-2" style="margin-top:8px;">
+        <div><label>New Username</label><input id="loginNewUsername" autocomplete="username"></div>
+        <div><label>New Password</label><input type="password" id="loginNewPassword" autocomplete="new-password"></div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn secondary" id="changeLoginBtn">Change Login</button>
+      </div>
+      <p class="hint" id="changeLoginStatus" style="margin-top:8px;"></p>
+    </div>
+
+    <div class="panel">
       <h3>Data Management</h3>
       <p class="hint">Export a full backup (items, categories, suppliers, purchases, cashiers, held sales, refunds, sales, settings) or restore from a previous backup file.</p>
       <div class="row">
@@ -817,31 +835,63 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <script>
-// Simple app-open password gate. Note: this is a UI deterrent, not real
-// security — the password check runs in this same client-side file, so
-// anyone determined enough to view the page source can read it. It stops
-// casual visitors from opening the app, nothing more.
+// App-open login gate: a real server-side username/password check via
+// Postgres (bcrypt hash compared inside verify_app_login) — the actual
+// password no longer lives in this file's source at all, unlike the old
+// hardcoded-string gate. Honest limit: this gates the UI, not the data
+// functions below it — same anon key still calls those regardless of
+// login, exactly as before.
 (function(){
   "use strict";
-  var LOCK_PASSWORD = "hafizdairy1234";
+  var LOGIN_APP_NAME = "pos-hafiz-dairy";
+  var SUPABASE_URL = "https://ajevxwdgmpaakjkffvmf.supabase.co";
+  var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqZXZ4d2RnbXBhYWtqa2Zmdm1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwNjE5NzIsImV4cCI6MjEwMDYzNzk3Mn0.bB97bHOFgCeMUTYUraOArzvXAkFRHxiajrCg3gwCGrc";
+
   var lockScreen = document.getElementById("lockScreen");
+  var lockUserInput = document.getElementById("lockUsernameInput");
   var lockInput = document.getElementById("lockPasswordInput");
   var lockError = document.getElementById("lockError");
+  var lockBtn = document.getElementById("lockUnlockBtn");
 
   function tryUnlock(){
-    if(lockInput.value === LOCK_PASSWORD){
-      lockScreen.style.display = "none";
-    } else {
-      lockError.textContent = "Incorrect password.";
-      lockInput.value = "";
-      lockInput.focus();
+    var username = lockUserInput.value.trim();
+    var password = lockInput.value;
+    if(!username || !password){
+      lockError.textContent = "Enter both username and password.";
+      return;
     }
+    lockBtn.disabled = true;
+    lockBtn.textContent = "Checking…";
+    fetch(SUPABASE_URL + "/rest/v1/rpc/verify_app_login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer " + SUPABASE_ANON_KEY },
+      body: JSON.stringify({ p_app: LOGIN_APP_NAME, p_username: username, p_password: password })
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(t){ throw new Error(t || ("HTTP " + r.status)); });
+      return r.json();
+    }).then(function(ok){
+      if(ok){
+        lockScreen.style.display = "none";
+      } else {
+        lockError.textContent = "Incorrect username or password.";
+        lockInput.value = "";
+        lockInput.focus();
+      }
+    }).catch(function(err){
+      lockError.textContent = "Couldn't reach the database — check your internet connection.";
+    }).finally(function(){
+      lockBtn.disabled = false;
+      lockBtn.textContent = "Log In";
+    });
   }
-  document.getElementById("lockUnlockBtn").addEventListener("click", tryUnlock);
+  lockBtn.addEventListener("click", tryUnlock);
   lockInput.addEventListener("keydown", function(e){
     if(e.key === "Enter") tryUnlock();
   });
-  lockInput.focus();
+  lockUserInput.addEventListener("keydown", function(e){
+    if(e.key === "Enter") tryUnlock();
+  });
+  lockUserInput.focus();
 })();
 
 (function(){
@@ -3593,6 +3643,36 @@
     readCloudFormIntoState();
     saveCloudConfig();
     toast("Cloud Sync settings saved.");
+  });
+
+  document.getElementById("changeLoginBtn").addEventListener("click", function(){
+    var curUser = document.getElementById("loginCurrentUsername").value.trim();
+    var curPass = document.getElementById("loginCurrentPassword").value;
+    var newUser = document.getElementById("loginNewUsername").value.trim();
+    var newPass = document.getElementById("loginNewPassword").value;
+    var statusEl = document.getElementById("changeLoginStatus");
+    if(!curUser || !curPass || !newUser || !newPass){
+      statusEl.textContent = "Fill in all four fields.";
+      return;
+    }
+    statusEl.textContent = "Checking…";
+    fetch(supabaseUrl("set_app_login"), {
+      method: "POST",
+      headers: supabaseHeaders(),
+      body: JSON.stringify({ p_app: "pos-hafiz-dairy", p_username: curUser, p_current_password: curPass, p_new_username: newUser, p_new_password: newPass })
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(t){ throw new Error(t || ("HTTP " + r.status)); });
+      return r.json();
+    }).then(function(ok){
+      if(ok){
+        statusEl.textContent = "Login changed. Use the new username/password next time you log in.";
+        ["loginCurrentUsername","loginCurrentPassword","loginNewUsername","loginNewPassword"].forEach(function(id){ document.getElementById(id).value = ""; });
+      } else {
+        statusEl.textContent = "Current username/password is incorrect.";
+      }
+    }).catch(function(err){
+      statusEl.textContent = "Couldn't reach the database: " + err.message;
+    });
   });
 
   document.getElementById("cloudTestBtn").addEventListener("click", function(){
