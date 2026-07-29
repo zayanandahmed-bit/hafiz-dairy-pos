@@ -10,15 +10,19 @@
 -- 5. Paste both into the app's Settings -> Cloud Sync (Supabase) panel.
 --
 -- Design: every table is locked down with Row Level Security (RLS) and NO
--- direct table access is granted to anyone. The only way in or out is through
--- the two functions below (sync_push / sync_pull), which run with elevated
--- privileges (SECURITY DEFINER) but only do exactly what they're written to
--- do. This means even someone who gets your anon key can only call these two
--- functions — they can't run arbitrary queries against your tables.
+-- direct table access is granted to anyone. The only way in or out is
+-- through the SECURITY DEFINER functions below, which run with elevated
+-- privileges but only do exactly what they're written to do. This means
+-- even someone who gets your anon key can only call these functions — they
+-- can't run arbitrary queries against your tables.
 --
--- Every save in the app sends the FULL current dataset, and sync_push wipes
--- and rewrites each table to match inside a single transaction, so the
--- database is always an exact, consistent mirror of the app's data.
+-- Every add/edit/delete in the app saves to the database instantly:
+-- sync_append_sale/sync_append_refund insert one record at a time (so sales
+-- history never has to be resent in full), while sync_replace_* functions
+-- wipe-and-rewrite just their own table (items, categories, suppliers,
+-- purchases, cashiers, held sales, shifts, settings) whenever that specific
+-- thing changes. sync_push/sync_pull remain as a full-dataset replace/read,
+-- used only for restoring a backup file.
 
 -- ============== TABLES ==============
 
@@ -397,7 +401,250 @@ begin
 end;
 $$;
 
--- ============== grant access ONLY to the two functions above ==============
+-- ============== sync_append_sale: instant single-sale insert ==============
+-- Used right after checkout, on every device, so a sale reaches the database
+-- immediately without resending the entire sales history each time. Safe to
+-- retry (e.g. after a dropped connection) since it upserts on the sale's id.
+
+create or replace function sync_append_sale(sale jsonb, receipt_counter integer default null)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into sales (id, receipt_no, date, customer, cashier, payment, cash, subtotal, discount_pct, discount_amt, tax_pct, tax_amt, grand)
+  values (
+    sale->>'id', (sale->>'receiptNo')::integer, (sale->>'date')::timestamptz, sale->>'customer', sale->>'cashier', sale->>'payment',
+    (sale->>'cash')::numeric, (sale->>'subtotal')::numeric, (sale->>'discountPct')::numeric, (sale->>'discountAmt')::numeric,
+    (sale->>'taxPct')::numeric, (sale->>'taxAmt')::numeric, (sale->>'grand')::numeric
+  )
+  on conflict (id) do update set
+    receipt_no = excluded.receipt_no, date = excluded.date, customer = excluded.customer,
+    cashier = excluded.cashier, payment = excluded.payment, cash = excluded.cash,
+    subtotal = excluded.subtotal, discount_pct = excluded.discount_pct, discount_amt = excluded.discount_amt,
+    tax_pct = excluded.tax_pct, tax_amt = excluded.tax_amt, grand = excluded.grand;
+
+  delete from sale_lines where sale_id = sale->>'id';
+  insert into sale_lines (sale_id, item_id, item_name, barcode, price, qty, unit, subtotal)
+  select sale->>'id', l->>'itemId', l->>'name', coalesce(l->>'barcode',''), (l->>'price')::numeric,
+         (l->>'qty')::numeric, coalesce(l->>'unit',''), (l->>'subtotal')::numeric
+  from jsonb_array_elements(coalesce(sale->'lines', '[]'::jsonb)) l;
+
+  if receipt_counter is not null then
+    insert into meta (key, value) values ('receiptCounter', receipt_counter::text)
+    on conflict (key) do update set value = excluded.value;
+  end if;
+end;
+$$;
+
+-- ============== sync_append_refund: instant single-refund insert ==============
+
+create or replace function sync_append_refund(refund jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into refunds (id, sale_id, receipt_no, date, total, reason, cashier)
+  values (
+    refund->>'id', refund->>'saleId', (refund->>'receiptNo')::integer, (refund->>'date')::timestamptz,
+    (refund->>'total')::numeric, coalesce(refund->>'reason',''), refund->>'cashier'
+  )
+  on conflict (id) do update set
+    sale_id = excluded.sale_id, receipt_no = excluded.receipt_no, date = excluded.date,
+    total = excluded.total, reason = excluded.reason, cashier = excluded.cashier;
+
+  delete from refund_lines where refund_id = refund->>'id';
+  insert into refund_lines (refund_id, item_id, item_name, qty, price, refund_amount)
+  select refund->>'id', l->>'itemId', l->>'name', (l->>'qty')::numeric, (l->>'price')::numeric, (l->>'refundAmount')::numeric
+  from jsonb_array_elements(coalesce(refund->'lines', '[]'::jsonb)) l;
+end;
+$$;
+
+-- ============== sync_clear_sales: wipes sales/sale_lines only ==============
+-- Used by "Clear all sales history" — a deliberate one-off admin action,
+-- not something that happens per checkout.
+
+create or replace function sync_clear_sales()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from sale_lines where true;
+  delete from sales where true;
+end;
+$$;
+
+-- ============== per-domain instant replace functions ==============
+-- Every button that adds/edits/deletes items, categories, suppliers,
+-- purchases, cashiers, held sales, shifts, or settings calls one of these
+-- immediately — each only touches its own table, so editing inventory never
+-- has to resend sales history (and vice versa).
+
+create or replace function sync_replace_items(items jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from items where true;
+  insert into items (id, name, barcode, category, price, stock, unit, low_stock)
+  select x->>'id', x->>'name', coalesce(x->>'barcode',''), coalesce(x->>'category',''),
+         coalesce((x->>'price')::numeric,0), coalesce((x->>'stock')::numeric,0),
+         coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0)
+  from jsonb_array_elements(items) x;
+end;
+$$;
+
+create or replace function sync_replace_categories(categories jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from categories where true;
+  insert into categories (name)
+  select jsonb_array_elements_text(categories);
+end;
+$$;
+
+create or replace function sync_replace_suppliers(suppliers jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from suppliers where true;
+  insert into suppliers (id, name, contact, address)
+  select x->>'id', x->>'name', coalesce(x->>'contact',''), coalesce(x->>'address','')
+  from jsonb_array_elements(suppliers) x;
+end;
+$$;
+
+create or replace function sync_replace_cashiers(cashiers jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from cashiers where true;
+  insert into cashiers (id, name, pin)
+  select x->>'id', x->>'name', coalesce(x->>'pin','')
+  from jsonb_array_elements(cashiers) x;
+end;
+$$;
+
+create or replace function sync_replace_purchases(purchases jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from purchases where true;
+  insert into purchases (id, date, supplier_id, supplier_name, item_id, item_name, qty, cost, total, notes, proof_data_url, proof_name)
+  select x->>'id',
+         nullif(x->>'date','')::date,
+         x->>'supplierId', x->>'supplierName', x->>'itemId', x->>'itemName',
+         (x->>'qty')::numeric, (x->>'cost')::numeric, (x->>'total')::numeric, coalesce(x->>'notes',''),
+         x->>'proof', x->>'proofName'
+  from jsonb_array_elements(purchases) x;
+end;
+$$;
+
+create or replace function sync_replace_held_sales(held_sales jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from held_sales_cart where true;
+  delete from held_sales where true;
+  insert into held_sales (id, date, customer, discount, tax, cashier)
+  select x->>'id', (x->>'date')::timestamptz, x->>'customer', (x->>'discount')::numeric, (x->>'tax')::numeric, x->>'cashier'
+  from jsonb_array_elements(held_sales) x;
+
+  insert into held_sales_cart (held_id, item_id, qty)
+  select h->>'id', c->>'itemId', (c->>'qty')::numeric
+  from jsonb_array_elements(held_sales) h,
+       jsonb_array_elements(coalesce(h->'cart','[]'::jsonb)) c;
+end;
+$$;
+
+create or replace function sync_replace_shifts(shifts jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from shifts where true;
+  insert into shifts (id, cashier_name, start, "end", opening_cash, cash_sales, card_sales, wallet_sales, cash_refunds, txn_count, expected_cash, actual_cash, difference, notes)
+  select x->>'id', x->>'cashierName', (x->>'start')::timestamptz, (x->>'end')::timestamptz,
+         (x->>'openingCash')::numeric, (x->>'cashSales')::numeric, (x->>'cardSales')::numeric, (x->>'walletSales')::numeric,
+         (x->>'cashRefunds')::numeric, (x->>'txnCount')::integer, (x->>'expectedCash')::numeric,
+         (x->>'actualCash')::numeric, (x->>'difference')::numeric, coalesce(x->>'notes','')
+  from jsonb_array_elements(shifts) x;
+end;
+$$;
+
+create or replace function sync_replace_active_shift(active_shift jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from active_shift where true;
+  if active_shift is not null and active_shift != 'null'::jsonb then
+    insert into active_shift (id, cashier_id, cashier_name, start, opening_cash)
+    values (
+      active_shift->>'id',
+      active_shift->>'cashierId',
+      active_shift->>'cashierName',
+      (active_shift->>'start')::timestamptz,
+      (active_shift->>'openingCash')::numeric
+    );
+  end if;
+end;
+$$;
+
+create or replace function sync_replace_settings(settings jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from settings where true;
+  insert into settings (key, value)
+  select k, v
+  from jsonb_each_text(settings) as t(k, v);
+end;
+$$;
+
+-- ============== grant access ONLY to the functions above ==============
 
 grant execute on function sync_push(jsonb) to anon;
 grant execute on function sync_pull() to anon;
+grant execute on function sync_append_sale(jsonb, integer) to anon;
+grant execute on function sync_append_refund(jsonb) to anon;
+grant execute on function sync_clear_sales() to anon;
+grant execute on function sync_replace_items(jsonb) to anon;
+grant execute on function sync_replace_categories(jsonb) to anon;
+grant execute on function sync_replace_suppliers(jsonb) to anon;
+grant execute on function sync_replace_cashiers(jsonb) to anon;
+grant execute on function sync_replace_purchases(jsonb) to anon;
+grant execute on function sync_replace_held_sales(jsonb) to anon;
+grant execute on function sync_replace_shifts(jsonb) to anon;
+grant execute on function sync_replace_active_shift(jsonb) to anon;
+grant execute on function sync_replace_settings(jsonb) to anon;

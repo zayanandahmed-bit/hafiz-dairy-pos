@@ -601,7 +601,7 @@
         <h3>Cloud Sync (Supabase)</h3>
         <div id="cloudStatus"></div>
       </div>
-      <p class="hint">Connects to a Supabase database you set up yourself (see supabase-schema.sql). Once set up, every change here saves to your database, and any device with this URL+key can pull the latest data.</p>
+      <p class="hint">Connects to a Supabase database you set up yourself (see supabase-schema.sql). Every add, edit, or delete anywhere in the app saves to the database instantly — there's nothing manual to click.</p>
       <div class="grid grid-2">
         <div><label>Supabase Project URL</label><input id="setCloudUrl" placeholder="https://xxxxxxxx.supabase.co"></div>
         <div><label>Supabase Anon Key</label><input id="setCloudSecret" placeholder="the anon public key from Project Settings > API"></div>
@@ -613,7 +613,6 @@
       <div class="row">
         <button class="btn secondary" id="cloudTestBtn">Test Connection</button>
         <button class="btn secondary" id="cloudSyncNowBtn">Pull Latest From Cloud</button>
-        <button class="btn green" id="cloudPushNowBtn">Update Database Now</button>
         <button class="btn" id="cloudSaveBtn">Save Cloud Settings</button>
       </div>
       <p class="hint" id="cloudLastSync" style="margin-top:8px;"></p>
@@ -838,10 +837,15 @@
 (function(){
   "use strict";
 
-  // Nothing here touches localStorage — the Supabase database is the only
-  // place this app's data lives. Every load fetches fresh from the cloud and
-  // every change pushes straight back; the browser holds state only in
-  // memory for the current tab.
+  // Every add/edit/delete pushes to Supabase instantly — there's no manual
+  // "save" step anywhere. Sales and refunds append one record at a time (see
+  // pushSaleInstant/pushRefundInstant below) so sales history never has to be
+  // resent in full. Everything else (items, categories, suppliers, purchases,
+  // cashiers, held sales, shifts, settings) instantly replaces just its own
+  // table (see pushDomainInstant below) — cheap, since none of those lists
+  // grow with every transaction the way sales history does. Everything is
+  // also cached in localStorage as a safety net, so a dropped connection
+  // never loses a change — it just retries until it's confirmed.
 
   // Baked-in Supabase connection so every device works out of the box with
   // zero setup — no need to type the URL/key in on each new phone. This is
@@ -888,24 +892,88 @@
     collapsedCats: {}
   };
 
-  function saveItems(){ cloudPushAll(); }
-  function saveSales(){ cloudPushAll(); }
-  function saveCats(){ cloudPushAll(); }
-  function saveSettings(){ cloudPushAll(); }
-  function saveSuppliers(){ cloudPushAll(); }
-  function savePurchases(){ cloudPushAll(); }
-  function saveCashiers(){ cloudPushAll(); }
+  function saveItems(){ saveLocalState(); pushDomainInstant("items"); }
+  function saveSales(){ saveLocalState(); }
+  function saveCats(){ saveLocalState(); pushDomainInstant("categories"); }
+  function saveSettings(){ saveLocalState(); pushDomainInstant("settings"); }
+  function saveSuppliers(){ saveLocalState(); pushDomainInstant("suppliers"); }
+  function savePurchases(){ saveLocalState(); pushDomainInstant("purchases"); }
+  function saveCashiers(){ saveLocalState(); pushDomainInstant("cashiers"); }
   function saveCurrentCashier(){ /* session-only, kept in memory — not persisted anywhere */ }
-  function saveHeld(){ cloudPushAll(); }
-  function saveRefunds(){ cloudPushAll(); }
-  function saveShifts(){ cloudPushAll(); }
-  function saveActiveShift(){ cloudPushAll(); }
+  function saveHeld(){ saveLocalState(); pushDomainInstant("heldSales"); }
+  function saveRefunds(){ saveLocalState(); }
+  function saveShifts(){ saveLocalState(); pushDomainInstant("shifts"); }
+  function saveActiveShift(){ saveLocalState(); pushDomainInstant("activeShift"); }
   function nextReceiptNo(){
     state.receiptCounter = (state.receiptCounter || 1000) + 1;
-    cloudPushAll();
+    saveLocalState();
     return state.receiptCounter;
   }
   function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+  // ================= LOCAL CACHE (offline safety net) =================
+  // Every change lands here first so nothing is ever lost to a dropped
+  // connection or a refresh — the cloud push below is what makes it durable
+  // for other devices, but this is what protects THIS device in the meantime.
+  var LOCAL_STORAGE_KEY = "hafizPos_localState_v1";
+  function saveLocalState(){
+    try{
+      var snapshot = {
+        items: state.items, categories: state.categories, suppliers: state.suppliers,
+        purchases: state.purchases, cashiers: state.cashiers, heldSales: state.heldSales,
+        shifts: state.shifts, activeShift: state.activeShift, settings: state.settings,
+        sales: state.sales, refunds: state.refunds, receiptCounter: state.receiptCounter
+      };
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(snapshot));
+    }catch(e){ /* storage full/unavailable — cloud push is still attempted regardless */ }
+  }
+  function loadLocalState(){
+    try{
+      var raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if(!raw) return false;
+      applyCloudData(JSON.parse(raw));
+      return true;
+    }catch(e){ return false; }
+  }
+
+  // ================= PENDING SYNC (records/domains not yet confirmed saved) =================
+  // If a push fails (offline, server hiccup), the change is already safe in
+  // state + localStorage above — this just tracks WHAT still needs to reach
+  // the cloud, and keeps retrying until it does.
+  //  - sales/refunds: queued individually by record, since sync_append_* inserts one at a time.
+  //  - every other domain: just a "dirty" flag, since sync_replace_* always resends
+  //    that whole (small, bounded) table from current state — retrying just means
+  //    resending the latest version, so only the flag needs to survive a reload.
+  var PENDING_QUEUE_KEY = "hafizPos_pendingQueue_v1";
+  var pendingQueue = { sales: [], refunds: [] };
+  (function loadPendingQueue(){
+    try{
+      var raw = localStorage.getItem(PENDING_QUEUE_KEY);
+      if(raw) pendingQueue = Object.assign({ sales: [], refunds: [] }, JSON.parse(raw));
+    }catch(e){ /* start empty */ }
+  })();
+  function savePendingQueue(){
+    try{ localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(pendingQueue)); }catch(e){}
+  }
+  // So a sale/refund made moments ago (but not yet confirmed pushed) doesn't
+  // visually vanish when this device reconciles with the cloud on load.
+  function mergeWithPending(cloudList, pendingList){
+    var pendingIds = pendingList.map(function(x){ return x.id; });
+    var filtered = (cloudList || []).filter(function(x){ return pendingIds.indexOf(x.id) === -1; });
+    return filtered.concat(pendingList);
+  }
+
+  var DIRTY_DOMAINS_KEY = "hafizPos_dirtyDomains_v1";
+  var dirtyDomains = {};
+  (function loadDirtyDomains(){
+    try{
+      var raw = localStorage.getItem(DIRTY_DOMAINS_KEY);
+      if(raw) dirtyDomains = JSON.parse(raw);
+    }catch(e){ /* start empty */ }
+  })();
+  function saveDirtyDomains(){
+    try{ localStorage.setItem(DIRTY_DOMAINS_KEY, JSON.stringify(dirtyDomains)); }catch(e){}
+  }
 
   // ================= CLOUD SYNC (Supabase) =================
   function saveCloudConfig(){ /* session-only override — not persisted anywhere */ }
@@ -922,7 +990,6 @@
     };
   }
 
-  var cloudPushTimer = null;
   function doCloudPushNow(){
     setCloudStatus("syncing");
     var payload = {
@@ -956,22 +1023,147 @@
     });
   }
 
-  function cloudPushAll(){
-    if(!cloudReady()) return;
-    // Debounced so a burst of changes (e.g. a checkout that touches items+sales) collapses into one request.
-    clearTimeout(cloudPushTimer);
-    cloudPushTimer = setTimeout(function(){
-      doCloudPushNow().catch(function(){ /* status indicator already shows the error */ });
-    }, 500);
+  // ================= INSTANT SYNC (sales & refunds only) =================
+  // Appends one record via a dedicated RPC instead of resending the whole
+  // dataset — so this stays a small, flat request no matter how much sales
+  // history has piled up. Queued locally first so a dropped connection never
+  // loses the record; it just retries until it's confirmed.
+  function pushSaleInstant(sale){
+    pendingQueue.sales.push({ sale: sale, receiptCounter: state.receiptCounter });
+    savePendingQueue();
+    flushPendingQueue();
+  }
+  function pushRefundInstant(refund){
+    pendingQueue.refunds.push(refund);
+    savePendingQueue();
+    flushPendingQueue();
   }
 
-  // Skips the debounce entirely — used right after a completed sale so the
-  // database is updated the instant checkout finishes, not ~500ms later.
-  function cloudPushInstant(){
-    if(!cloudReady()) return;
-    clearTimeout(cloudPushTimer);
-    doCloudPushNow().catch(function(){ /* status indicator already shows the error */ });
+  var flushInFlight = false;
+  function flushPendingQueue(){
+    if(!cloudReady() || flushInFlight) return;
+    if(pendingQueue.sales.length === 0 && pendingQueue.refunds.length === 0) return;
+    flushInFlight = true;
+    setCloudStatus("syncing");
+
+    var salesToSend = pendingQueue.sales.slice();
+    var refundsToSend = pendingQueue.refunds.slice();
+
+    var salesDone = salesToSend.reduce(function(chain, entry){
+      return chain.then(function(){
+        return fetch(supabaseUrl("sync_append_sale"), {
+          method: "POST",
+          headers: supabaseHeaders(),
+          body: JSON.stringify({ sale: entry.sale, receipt_counter: entry.receiptCounter })
+        }).then(function(r){
+          if(!r.ok) return r.text().then(function(t){ throw new Error(t || ("HTTP " + r.status)); });
+          pendingQueue.sales = pendingQueue.sales.filter(function(p){ return p.sale.id !== entry.sale.id; });
+          savePendingQueue();
+        });
+      });
+    }, Promise.resolve());
+
+    var refundsDone = salesDone.then(function(){
+      return refundsToSend.reduce(function(chain, refund){
+        return chain.then(function(){
+          return fetch(supabaseUrl("sync_append_refund"), {
+            method: "POST",
+            headers: supabaseHeaders(),
+            body: JSON.stringify({ refund: refund })
+          }).then(function(r){
+            if(!r.ok) return r.text().then(function(t){ throw new Error(t || ("HTTP " + r.status)); });
+            pendingQueue.refunds = pendingQueue.refunds.filter(function(p){ return p.id !== refund.id; });
+            savePendingQueue();
+          });
+        });
+      }, Promise.resolve());
+    });
+
+    refundsDone.then(function(){
+      setCloudStatus("synced");
+    }).catch(function(err){
+      setCloudStatus("error", err.message || "offline or unreachable");
+    }).finally(function(){
+      flushInFlight = false;
+    });
   }
+
+  // Wipes the sales table instantly — used by "Clear all sales history",
+  // which is a deliberate one-off admin action, not a per-checkout event.
+  function clearSalesInstant(){
+    pendingQueue.sales = [];
+    savePendingQueue();
+    if(!cloudReady()) return Promise.resolve();
+    setCloudStatus("syncing");
+    return fetch(supabaseUrl("sync_clear_sales"), {
+      method: "POST",
+      headers: supabaseHeaders(),
+      body: JSON.stringify({})
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(t){ throw new Error(t || ("HTTP " + r.status)); });
+      setCloudStatus("synced");
+    }).catch(function(err){
+      setCloudStatus("error", err.message || "offline or unreachable");
+      throw err;
+    });
+  }
+
+  // ================= INSTANT SYNC (everything else) =================
+  // One RPC per table (see supabase-schema.sql), so editing inventory only
+  // ever resends the items table, editing a supplier only resends suppliers,
+  // etc — never the sales history. Debounced briefly so a burst of edits in
+  // the same tick (e.g. a checkout touching several items' stock) collapses
+  // into one request per domain instead of one per field change.
+  var DOMAIN_RPC = {
+    items: "sync_replace_items",
+    categories: "sync_replace_categories",
+    suppliers: "sync_replace_suppliers",
+    purchases: "sync_replace_purchases",
+    cashiers: "sync_replace_cashiers",
+    heldSales: "sync_replace_held_sales",
+    shifts: "sync_replace_shifts",
+    activeShift: "sync_replace_active_shift",
+    settings: "sync_replace_settings"
+  };
+  var domainPushTimers = {};
+  var domainFlushInFlight = {};
+
+  function pushDomainInstant(domain){
+    dirtyDomains[domain] = true;
+    saveDirtyDomains();
+    clearTimeout(domainPushTimers[domain]);
+    domainPushTimers[domain] = setTimeout(function(){ flushDomain(domain); }, 400);
+  }
+
+  function flushDomain(domain){
+    if(!cloudReady() || !dirtyDomains[domain] || domainFlushInFlight[domain]) return;
+    domainFlushInFlight[domain] = true;
+    setCloudStatus("syncing");
+    var body = {};
+    body[domain] = state[domain];
+    fetch(supabaseUrl(DOMAIN_RPC[domain]), {
+      method: "POST",
+      headers: supabaseHeaders(),
+      body: JSON.stringify(body)
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(t){ throw new Error(t || ("HTTP " + r.status)); });
+      delete dirtyDomains[domain];
+      saveDirtyDomains();
+      setCloudStatus("synced");
+    }).catch(function(err){
+      setCloudStatus("error", err.message || "offline or unreachable");
+    }).finally(function(){
+      domainFlushInFlight[domain] = false;
+    });
+  }
+
+  function flushAllDirty(){
+    flushPendingQueue();
+    Object.keys(dirtyDomains).forEach(flushDomain);
+  }
+
+  window.addEventListener("online", flushAllDirty);
+  setInterval(flushAllDirty, 20000);
 
   function cloudPullAll(){
     if(!state.cloud.url || !state.cloud.secret){
@@ -2427,7 +2619,7 @@
     };
     state.sales.push(sale);
     saveSales();
-    cloudPushInstant();
+    pushSaleInstant(sale);
 
     showReceipt(sale);
 
@@ -2799,6 +2991,7 @@
     };
     state.refunds.push(refund);
     saveRefunds();
+    pushRefundInstant(refund);
 
     selected.forEach(function(l){
       var item = l.itemId ? state.items.find(function(it){ return it.id === l.itemId; }) : null;
@@ -2849,6 +3042,9 @@
     if(!confirm("Clear all sales history? This cannot be undone.")) return;
     state.sales = [];
     saveSales();
+    clearSalesInstant().catch(function(err){
+      toast("Cleared locally, but the cloud database wasn't reached: " + err.message);
+    });
     renderSales();
     renderDashboard();
   });
@@ -3247,27 +3443,6 @@
     });
   });
 
-  document.getElementById("cloudPushNowBtn").addEventListener("click", function(){
-    readCloudFormIntoState();
-    saveCloudConfig();
-    if(!state.cloud.url || !state.cloud.secret){
-      toast("Enter the Supabase Project URL and Anon Key first.");
-      return;
-    }
-    var btn = document.getElementById("cloudPushNowBtn");
-    var originalLabel = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = "Updating…";
-    doCloudPushNow().then(function(){
-      toast("Database updated with everything on this device.");
-    }).catch(function(err){
-      toast("Update failed: " + err.message);
-    }).finally(function(){
-      btn.disabled = false;
-      btn.textContent = originalLabel;
-    });
-  });
-
   // ---- Data management ----
   document.getElementById("exportDataBtn").addEventListener("click", function(){
     var backup = {
@@ -3310,14 +3485,22 @@
         state.activeShift = data.activeShift || null;
         state.currentCashierId = null;
         state.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings || {});
-        saveItems(); saveSales(); saveCats(); saveSuppliers(); savePurchases(); saveSettings();
-        saveCashiers(); saveHeld(); saveRefunds(); saveCurrentCashier(); saveShifts(); saveActiveShift();
+        saveLocalState();
+        pendingQueue = { sales: [], refunds: [] };
+        savePendingQueue();
+        dirtyDomains = {};
+        saveDirtyDomains();
         applyTheme();
         loadSettingsForm();
         renderInventory(); renderSales(); renderDashboard(); renderCart(); renderPurchasesView();
         renderCashierUI(); updateCashierLabel(); updateHeldCount(); renderShiftHistory();
         document.getElementById("sbStoreName").textContent = state.settings.storeName;
-        toast("Backup imported successfully.");
+        toast("Backup imported — pushing everything to the cloud…");
+        doCloudPushNow().then(function(){
+          toast("Backup imported and saved to the cloud.");
+        }).catch(function(err){
+          toast("Backup imported locally, but the cloud push failed: " + err.message);
+        });
       }catch(err){
         toast("Invalid backup file.");
       }
@@ -3372,12 +3555,26 @@
   renderShiftHistory();
   loadSettingsForm();
 
-  // The database is the only place this app's data lives, so every load
-  // pulls fresh — there's no local copy to fall back on or to protect.
+  // Local cache loads first (instant, works offline), then retry anything
+  // that didn't make it to the cloud last time this device was open.
+  var hadLocalData = loadLocalState();
+  flushAllDirty();
+
   if(cloudReady()){
     cloudPullAll().then(function(data){
-      applyCloudData(data);
-      toast("Synced with cloud.");
+      // Every domain the cloud has gets applied UNLESS this device has an
+      // unconfirmed local change still pending for it — that keeps a fresh
+      // edit from being overwritten by stale cloud data while its push is
+      // still in flight/retrying.
+      var merged = {};
+      Object.keys(data).forEach(function(k){
+        if(k === "sales" || k === "refunds" || dirtyDomains[k]) return;
+        merged[k] = data[k];
+      });
+      merged.sales = mergeWithPending(data.sales, pendingQueue.sales.map(function(p){ return p.sale; }));
+      merged.refunds = mergeWithPending(data.refunds, pendingQueue.refunds);
+      applyCloudData(merged);
+      if(!hadLocalData) toast("Synced with cloud.");
     }).catch(function(err){
       toast("Couldn't reach the database — check your internet connection: " + err.message);
     });
