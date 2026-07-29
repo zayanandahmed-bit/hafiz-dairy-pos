@@ -508,7 +508,7 @@ create index if not exists idx_refund_lines_refund_id on refund_lines(refund_id)
 
 create or replace function sync_pull_sales_range(
   range_start timestamptz, range_end timestamptz,
-  page_size integer default 50,
+  page_size integer default 30,
   cursor_date timestamptz default null, cursor_id text default null
 )
 returns jsonb

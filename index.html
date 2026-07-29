@@ -488,6 +488,11 @@
         <tbody id="purchaseBody"></tbody>
       </table>
       <div id="purchaseEmpty" class="empty" style="display:none;">No purchases recorded yet.</div>
+      <div class="row" style="margin-top:10px;align-items:center;">
+        <button class="btn secondary small" id="purchasePrevPageBtn">← Previous Page</button>
+        <span id="purchasePageLabel" style="font-size:13px;color:var(--muted);">Page 1 of 1</span>
+        <button class="btn secondary small" id="purchaseNextPageBtn">Next Page →</button>
+      </div>
     </div>
   </div>
 
@@ -2005,6 +2010,7 @@
     pendingProofDataUrl = null; pendingProofName = null;
     document.getElementById("proofPreviewBox").style.display = "none";
 
+    purchasePageNumber = 1;
     renderPurchaseTable();
     renderInventory();
     toast("Purchase recorded" + (addStock ? " and stock updated." : "."));
@@ -2028,16 +2034,30 @@
     document.getElementById("proofModal").classList.remove("show");
   });
 
+  // Purchases stay small and are already fully loaded locally (unlike
+  // sales, this table doesn't grow per-transaction), so pagination here is
+  // just a client-side slice — no server round-trip needed.
+  var PURCHASES_PAGE_SIZE = 30;
+  var purchasePageNumber = 1;
+
   function renderPurchaseTable(){
     var body = document.getElementById("purchaseBody");
     var empty = document.getElementById("purchaseEmpty");
     var sorted = state.purchases.slice().sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
     empty.style.display = sorted.length === 0 ? "block" : "none";
 
+    var totalPages = Math.max(1, Math.ceil(sorted.length / PURCHASES_PAGE_SIZE));
+    if(purchasePageNumber > totalPages) purchasePageNumber = totalPages;
+    if(purchasePageNumber < 1) purchasePageNumber = 1;
+    var pageItems = sorted.slice((purchasePageNumber-1)*PURCHASES_PAGE_SIZE, purchasePageNumber*PURCHASES_PAGE_SIZE);
+
     var totalSpent = state.purchases.reduce(function(s,p){ return s+p.total; }, 0);
     document.getElementById("purchaseSummary").textContent = sorted.length + " purchase(s) · Total spent: " + money(totalSpent);
+    document.getElementById("purchasePageLabel").textContent = "Page " + purchasePageNumber + " of " + totalPages;
+    document.getElementById("purchasePrevPageBtn").disabled = purchasePageNumber <= 1;
+    document.getElementById("purchaseNextPageBtn").disabled = purchasePageNumber >= totalPages;
 
-    body.innerHTML = sorted.map(function(p){
+    body.innerHTML = pageItems.map(function(p){
       return "<tr>" +
         "<td>" + p.date + "</td>" +
         "<td>" + escapeHtml(p.supplierName) + "</td>" +
@@ -2052,12 +2072,22 @@
     }).join("");
   }
 
+  document.getElementById("purchaseNextPageBtn").addEventListener("click", function(){
+    purchasePageNumber++;
+    renderPurchaseTable();
+  });
+  document.getElementById("purchasePrevPageBtn").addEventListener("click", function(){
+    purchasePageNumber--;
+    renderPurchaseTable();
+  });
+
   function renderPurchasesView(){
     renderSupplierUI();
     populatePurchaseItemSelect();
     if(!document.getElementById("purchaseDate").value){
       document.getElementById("purchaseDate").value = new Date().toISOString().slice(0,10);
     }
+    purchasePageNumber = 1;
     renderPurchaseTable();
   }
 
@@ -2920,7 +2950,7 @@
   var RANGE_LABELS = { today: "Today", week: "This Week", month: "This Month", all: "All Time", custom: "Custom Range" };
 
   var currentDateRange = "all";
-  var SALES_PAGE_SIZE = 50;
+  var SALES_PAGE_SIZE = 30;
 
   // Keyset pagination state for Sales History — cursorStack holds the cursor
   // that was used to fetch each PRIOR page, so "Previous" just pops back to
