@@ -519,6 +519,11 @@
         <tbody id="salesBody"></tbody>
       </table>
       <div id="salesEmpty" class="empty" style="display:none;">No sales in this range.</div>
+      <div class="row" style="margin-top:10px;align-items:center;">
+        <button class="btn secondary small" id="salesPrevPageBtn">← Previous Page</button>
+        <span id="salesPageLabel" style="font-size:13px;color:var(--muted);">Page 1</span>
+        <button class="btn secondary small" id="salesNextPageBtn">Next Page →</button>
+      </div>
     </div>
   </div>
 
@@ -1224,13 +1229,19 @@
 
   // Raw fetch by explicit ISO bounds (used directly when a precise window is
   // needed, e.g. a shift's start-to-now, rather than a labeled range tab).
-  function fetchSalesRangeRaw(startISO, endISO, rowLimit){
+  // cursorDate/cursorId ask for the page AFTER that row (keyset pagination —
+  // pass both null for the first page). Server returns { hasMore, ... } so
+  // the caller knows whether a "Next Page" is possible.
+  function fetchSalesRangeRaw(startISO, endISO, pageSize, cursorDate, cursorId){
     if(!cloudReady()) return Promise.reject(new Error("Cloud Sync isn't configured yet."));
     setCloudStatus("syncing");
     return fetch(supabaseUrl("sync_pull_sales_range"), {
       method: "POST",
       headers: supabaseHeaders(),
-      body: JSON.stringify({ range_start: startISO, range_end: endISO, row_limit: rowLimit || 500 })
+      body: JSON.stringify({
+        range_start: startISO, range_end: endISO, page_size: pageSize || 50,
+        cursor_date: cursorDate || null, cursor_id: cursorId || null
+      })
     }).then(function(r){
       if(!r.ok) return r.text().then(function(t){ throw new Error(t || ("HTTP " + r.status)); });
       return r.json();
@@ -1243,9 +1254,9 @@
     });
   }
 
-  function fetchSalesRangeByLabel(range, fromStr, toStr, rowLimit){
+  function fetchSalesRangeByLabel(range, fromStr, toStr, pageSize, cursorDate, cursorId){
     var bounds = computeRangeBounds(range, fromStr, toStr);
-    return fetchSalesRangeRaw(bounds.start, bounds.end, rowLimit);
+    return fetchSalesRangeRaw(bounds.start, bounds.end, pageSize, cursorDate, cursorId);
   }
 
   // Defensive: Google Sheets can silently turn numeric-looking text (barcodes,
@@ -2909,21 +2920,59 @@
   var RANGE_LABELS = { today: "Today", week: "This Week", month: "This Month", all: "All Time", custom: "Custom Range" };
 
   var currentDateRange = "all";
+  var SALES_PAGE_SIZE = 50;
+
+  // Keyset pagination state for Sales History — cursorStack holds the cursor
+  // that was used to fetch each PRIOR page, so "Previous" just pops back to
+  // it instead of needing to page forward from scratch.
+  var salesPageCursorStack = [];
+  var salesPageCurrentCursor = null;
+  var salesPageHasMore = false;
+  var salesPageNumber = 1;
 
   // Fetches just the selected range's sales/refunds from the database and
   // re-renders — this is the only thing that ever pulls sales data now.
+  // Resets to page 1 — call this when the RANGE itself changes.
   function loadSalesHistoryRange(){
+    salesPageCursorStack = [];
+    salesPageCurrentCursor = null;
+    salesPageNumber = 1;
+    loadSalesHistoryPage();
+  }
+
+  function loadSalesHistoryPage(){
     var body = document.getElementById("salesBody");
     if(body) body.innerHTML = '<tr><td colspan="9">Loading…</td></tr>';
-    fetchSalesRangeByLabel(currentDateRange, document.getElementById("customFrom").value, document.getElementById("customTo").value, 500)
-      .then(function(data){
-        state.sales = (data.sales||[]).map(function(s){ (s.lines||[]).forEach(function(l){ l.barcode = str(l.barcode); }); return s; });
-        state.refunds = data.refunds || [];
-        state.rangeMeta = { totalCount: data.totalCount||0, totalRevenue: data.totalRevenue||0, topItems: data.topItems||[] };
-        renderSales();
-      })
-      .catch(function(err){ toast("Couldn't load that range: " + err.message); });
+    var cursor = salesPageCurrentCursor;
+    fetchSalesRangeByLabel(
+      currentDateRange, document.getElementById("customFrom").value, document.getElementById("customTo").value,
+      SALES_PAGE_SIZE, cursor ? cursor.date : null, cursor ? cursor.id : null
+    ).then(function(data){
+      state.sales = (data.sales||[]).map(function(s){ (s.lines||[]).forEach(function(l){ l.barcode = str(l.barcode); }); return s; });
+      state.refunds = data.refunds || [];
+      state.rangeMeta = { totalCount: data.totalCount||0, totalRevenue: data.totalRevenue||0, topItems: data.topItems||[] };
+      salesPageHasMore = !!data.hasMore;
+      renderSales();
+      document.getElementById("salesPageLabel").textContent = "Page " + salesPageNumber;
+      document.getElementById("salesPrevPageBtn").disabled = salesPageCursorStack.length === 0;
+      document.getElementById("salesNextPageBtn").disabled = !salesPageHasMore;
+    }).catch(function(err){ toast("Couldn't load that range: " + err.message); });
   }
+
+  document.getElementById("salesNextPageBtn").addEventListener("click", function(){
+    if(!salesPageHasMore || state.sales.length === 0) return;
+    var oldestOnPage = state.sales[state.sales.length - 1]; // list is newest-first
+    salesPageCursorStack.push(salesPageCurrentCursor);
+    salesPageCurrentCursor = { date: oldestOnPage.date, id: oldestOnPage.id };
+    salesPageNumber++;
+    loadSalesHistoryPage();
+  });
+  document.getElementById("salesPrevPageBtn").addEventListener("click", function(){
+    if(salesPageCursorStack.length === 0) return;
+    salesPageCurrentCursor = salesPageCursorStack.pop();
+    salesPageNumber--;
+    loadSalesHistoryPage();
+  });
 
   document.querySelectorAll(".date-tab").forEach(function(btn){
     btn.addEventListener("click", function(){
@@ -2940,7 +2989,7 @@
   var dashDateRange = "week";
 
   function loadDashboardRange(){
-    fetchSalesRangeByLabel(dashDateRange, document.getElementById("dashCustomFrom").value, document.getElementById("dashCustomTo").value, 500)
+    fetchSalesRangeByLabel(dashDateRange, document.getElementById("dashCustomFrom").value, document.getElementById("dashCustomTo").value, 50)
       .then(function(data){
         state.sales = (data.sales||[]).map(function(s){ (s.lines||[]).forEach(function(l){ l.barcode = str(l.barcode); }); return s; });
         state.refunds = data.refunds || [];
@@ -2979,8 +3028,7 @@
     empty.style.display = sorted.length === 0 ? "block" : "none";
 
     var meta = state.rangeMeta || { totalCount: state.sales.length, totalRevenue: 0 };
-    var shownNote = meta.totalCount > state.sales.length ? " (showing most recent " + state.sales.length + ")" : "";
-    document.getElementById("salesSummary").textContent = sorted.length + " sale(s) shown" + shownNote + " · Revenue: " + money(meta.totalRevenue) + " (of " + meta.totalCount + " total in range)";
+    document.getElementById("salesSummary").textContent = sorted.length + " sale(s) on this page · Revenue: " + money(meta.totalRevenue) + " (" + meta.totalCount + " total in range)";
 
     body.innerHTML = sorted.map(function(sale){
       var d = new Date(sale.date);

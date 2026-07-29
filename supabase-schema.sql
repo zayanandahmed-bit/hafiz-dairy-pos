@@ -487,21 +487,30 @@ create index if not exists idx_refunds_date on refunds(date);
 create index if not exists idx_sale_lines_sale_id on sale_lines(sale_id);
 create index if not exists idx_refund_lines_refund_id on refund_lines(refund_id);
 
--- ============== sync_pull_sales_range: sales/refunds for one date range ==============
+-- ============== sync_pull_sales_range: one page of sales/refunds for a date range ==============
 -- Called whenever the user picks Today/This Week/This Month/Custom Range (or
--- All Time) in the Dashboard or Sales History — never on app load. Returns:
---   - sales/refunds: the actual rows for that range (capped at row_limit,
---     most recent first, so even an unbounded "All Time" row list responds fast)
---   - totalCount/totalRevenue/topItems: exact, regardless of the row cap —
---     for a BOUNDED range these come from a live indexed scan (fast no
---     matter how much total history exists, since the date filter narrows
---     it); for true "All Time" (both bounds null) they come from the
---     running-totals tables instead, since aggregating the entire table live
---     is exactly what timed out once sales history got into the tens of
---     thousands.
+-- All Time) in the Dashboard or Sales History, and again for each "Next
+-- page"/"Previous page" click — never on app load, never for the whole
+-- history at once. Returns:
+--   - sales/refunds: one page (page_size rows, newest-first) — pass
+--     cursor_date/cursor_id (the last row's date/id from the previous page)
+--     to get the NEXT page; leave both null for the first page. Uses a
+--     LATERAL join so only the selected page's line items get aggregated,
+--     never the whole sale_lines table, however large it's grown.
+--   - hasMore: true if there's another page after this one.
+--   - totalCount/totalRevenue/topItems: exact for the whole range regardless
+--     of paging — for a BOUNDED range these come from a live indexed scan
+--     (fast no matter how much total history exists); for true "All Time"
+--     (both bounds null) they come from the running-totals tables instead,
+--     since aggregating the entire table live is exactly what timed out
+--     once sales history got into the tens of thousands.
 -- Pass null for range_start/range_end for an unbounded (All Time) range.
 
-create or replace function sync_pull_sales_range(range_start timestamptz, range_end timestamptz, row_limit integer default 500)
+create or replace function sync_pull_sales_range(
+  range_start timestamptz, range_end timestamptz,
+  page_size integer default 50,
+  cursor_date timestamptz default null, cursor_id text default null
+)
 returns jsonb
 language plpgsql
 security definer
@@ -513,6 +522,8 @@ declare
   v_total_count integer;
   v_total_revenue numeric;
   v_top_items jsonb;
+  v_sales jsonb;
+  v_has_more boolean;
 begin
   if is_all_time then
     select count, revenue into v_total_count, v_total_revenue from sales_overall_totals where key = 'all';
@@ -537,30 +548,48 @@ begin
     ) t;
   end if;
 
-  select jsonb_build_object(
-    'sales', coalesce((
-      select jsonb_agg(x order by x->>'date' desc) from (
-        select jsonb_build_object(
-          'id', s.id, 'receiptNo', s.receipt_no, 'date', s.date, 'customer', s.customer,
-          'cashier', s.cashier, 'payment', s.payment, 'cash', s.cash, 'subtotal', s.subtotal,
-          'discountPct', s.discount_pct, 'discountAmt', s.discount_amt, 'taxPct', s.tax_pct,
-          'taxAmt', s.tax_amt, 'grand', s.grand,
-          'lines', coalesce(sl.lines, '[]'::jsonb)
-        ) as x
-        from sales s
-        left join (
-          select sale_id, jsonb_agg(jsonb_build_object(
-            'itemId', item_id, 'name', item_name, 'barcode', barcode,
-            'price', price, 'qty', qty, 'unit', unit, 'subtotal', subtotal
-          )) as lines
-          from sale_lines group by sale_id
-        ) sl on sl.sale_id = s.id
-        where (range_start is null or s.date >= range_start)
-          and (range_end is null or s.date <= range_end)
-        order by s.date desc
-        limit row_limit
-      ) x
+  -- Page: pick the next page_size+1 sale ROWS first (index-friendly — narrows
+  -- by range, then by the keyset cursor, then LIMIT), fetch the +1 extra only
+  -- to know if there's a next page, THEN lateral-join each selected sale's
+  -- own lines. This is what actually fixes the timeout: the old version
+  -- pre-aggregated the ENTIRE sale_lines table before the join happened, so
+  -- the row limit never helped — Postgres had already done the expensive part.
+  with page as (
+    select *
+    from sales s
+    where (range_start is null or s.date >= range_start)
+      and (range_end is null or s.date <= range_end)
+      and (cursor_date is null or (s.date, s.id) < (cursor_date, cursor_id))
+    order by s.date desc, s.id desc
+    limit page_size + 1
+  ),
+  trimmed as (
+    select * from page order by date desc, id desc limit page_size
+  )
+  select
+    coalesce(jsonb_agg(
+      jsonb_build_object(
+        'id', t.id, 'receiptNo', t.receipt_no, 'date', t.date, 'customer', t.customer,
+        'cashier', t.cashier, 'payment', t.payment, 'cash', t.cash, 'subtotal', t.subtotal,
+        'discountPct', t.discount_pct, 'discountAmt', t.discount_amt, 'taxPct', t.tax_pct,
+        'taxAmt', t.tax_amt, 'grand', t.grand,
+        'lines', coalesce(sl.lines, '[]'::jsonb)
+      ) order by t.date desc
     ), '[]'::jsonb),
+    (select count(*) from page) > page_size
+  into v_sales, v_has_more
+  from trimmed t
+  left join lateral (
+    select jsonb_agg(jsonb_build_object(
+      'itemId', item_id, 'name', item_name, 'barcode', barcode,
+      'price', price, 'qty', qty, 'unit', unit, 'subtotal', subtotal
+    )) as lines
+    from sale_lines where sale_id = t.id
+  ) sl on true;
+
+  select jsonb_build_object(
+    'sales', v_sales,
+    'hasMore', coalesce(v_has_more, false),
 
     'refunds', coalesce((
       select jsonb_agg(x order by x->>'date' desc) from (
@@ -570,17 +599,17 @@ begin
           'lines', coalesce(rl.lines, '[]'::jsonb)
         ) as x
         from refunds r
-        left join (
-          select refund_id, jsonb_agg(jsonb_build_object(
+        left join lateral (
+          select jsonb_agg(jsonb_build_object(
             'itemId', item_id, 'name', item_name, 'qty', qty,
             'price', price, 'refundAmount', refund_amount
           )) as lines
-          from refund_lines group by refund_id
-        ) rl on rl.refund_id = r.id
+          from refund_lines where refund_id = r.id
+        ) rl on true
         where (range_start is null or r.date >= range_start)
           and (range_end is null or r.date <= range_end)
         order by r.date desc
-        limit row_limit
+        limit page_size
       ) x
     ), '[]'::jsonb),
 
@@ -860,7 +889,10 @@ $$;
 -- ============== grant access ONLY to the functions above ==============
 
 grant execute on function sync_push(jsonb) to anon;
-grant execute on function sync_pull_sales_range(timestamptz, timestamptz, integer) to anon;
+grant execute on function sync_pull_sales_range(timestamptz, timestamptz, integer, timestamptz, text) to anon;
+-- The old 3-arg signature may still be cached from before — drop it so
+-- PostgREST doesn't get confused between overloads with the same name.
+drop function if exists sync_pull_sales_range(timestamptz, timestamptz, integer);
 grant execute on function sync_pull() to anon;
 grant execute on function sync_append_sale(jsonb, integer) to anon;
 grant execute on function sync_append_sales_batch(jsonb) to anon;
