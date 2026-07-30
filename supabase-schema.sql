@@ -273,6 +273,8 @@ alter table settings enable row level security;
 alter table meta enable row level security;
 alter table item_sales_totals enable row level security;
 alter table sales_overall_totals enable row level security;
+alter table customers enable row level security;
+alter table customer_payments enable row level security;
 
 -- ============== triggers: keep running totals in sync ==============
 -- Fire on every insert/update/delete to sales/sale_lines, regardless of
