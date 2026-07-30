@@ -35,11 +35,13 @@ create table if not exists items (
   cost numeric default 0, -- buying price per unit, so Financials' Money Out is accurate
   stock numeric default 0,
   unit text default '',
-  low_stock numeric default 0
+  low_stock numeric default 0,
+  expiry text default ''
 );
 
 -- Safe to re-run — no-op if the column already exists.
 alter table items add column if not exists cost numeric default 0;
+alter table items add column if not exists expiry text default '';
 
 -- A master reference catalog — items here are NOT live inventory (no stock
 -- tracking, don't show up in Billing/Purchases) until explicitly copied into
@@ -107,6 +109,29 @@ create table if not exists expenses (
 
 -- Safe to re-run — no-op if the column already exists.
 alter table expenses add column if not exists period text default '';
+
+-- Udhaar/credit accounts — a regular customer buys now, pays later.
+-- `balance` is a running counter (like items.stock), updated directly by the
+-- app on every credit sale (+) and logged payment (-), not recomputed from
+-- sales history — keeps this consistent with how stock is already tracked.
+create table if not exists customers (
+  id text primary key,
+  name text not null,
+  phone text default '',
+  notes text default '',
+  balance numeric default 0
+);
+
+-- Ledger of payments customers make against their credit balance — kept
+-- separate from `customers` itself so there's a printable/auditable history.
+create table if not exists customer_payments (
+  id text primary key,
+  customer_id text,
+  customer_name text default '',
+  amount numeric default 0,
+  date date,
+  notes text default ''
+);
 
 create table if not exists sales (
   id text primary key,
@@ -330,10 +355,10 @@ as $$
 begin
   if payload ? 'items' then
     delete from items where true;
-    insert into items (id, name, barcode, category, price, cost, stock, unit, low_stock)
+    insert into items (id, name, barcode, category, price, cost, stock, unit, low_stock, expiry)
     select x->>'id', x->>'name', coalesce(x->>'barcode',''), coalesce(x->>'category',''),
            coalesce((x->>'price')::numeric,0), coalesce((x->>'cost')::numeric,0), coalesce((x->>'stock')::numeric,0),
-           coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0)
+           coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0), coalesce(x->>'expiry','')
     from jsonb_array_elements(payload->'items') x;
   end if;
 
@@ -382,6 +407,21 @@ begin
     select x->>'id', nullif(x->>'date','')::date, coalesce(x->>'period',''), coalesce(x->>'category',''),
            coalesce((x->>'amount')::numeric,0), coalesce(x->>'notes','')
     from jsonb_array_elements(payload->'expenses') x;
+  end if;
+
+  if payload ? 'customers' then
+    delete from customers where true;
+    insert into customers (id, name, phone, notes, balance)
+    select x->>'id', x->>'name', coalesce(x->>'phone',''), coalesce(x->>'notes',''), coalesce((x->>'balance')::numeric,0)
+    from jsonb_array_elements(payload->'customers') x;
+  end if;
+
+  if payload ? 'customerPayments' then
+    delete from customer_payments where true;
+    insert into customer_payments (id, customer_id, customer_name, amount, date, notes)
+    select x->>'id', x->>'customerId', coalesce(x->>'customerName',''), coalesce((x->>'amount')::numeric,0),
+           nullif(x->>'date','')::date, coalesce(x->>'notes','')
+    from jsonb_array_elements(payload->'customerPayments') x;
   end if;
 
   if payload ? 'sales' then
@@ -489,7 +529,7 @@ begin
   select jsonb_build_object(
     'items', coalesce((select jsonb_agg(jsonb_build_object(
       'id', id, 'name', name, 'barcode', barcode, 'category', category,
-      'price', price, 'cost', cost, 'stock', stock, 'unit', unit, 'lowStock', low_stock
+      'price', price, 'cost', cost, 'stock', stock, 'unit', unit, 'lowStock', low_stock, 'expiry', expiry
     )) from items), '[]'::jsonb),
 
     'itemCatalog', coalesce((select jsonb_agg(jsonb_build_object(
@@ -516,6 +556,14 @@ begin
     'expenses', coalesce((select jsonb_agg(jsonb_build_object(
       'id', id, 'date', date, 'period', period, 'category', category, 'amount', amount, 'notes', notes
     )) from expenses), '[]'::jsonb),
+
+    'customers', coalesce((select jsonb_agg(jsonb_build_object(
+      'id', id, 'name', name, 'phone', phone, 'notes', notes, 'balance', balance
+    )) from customers), '[]'::jsonb),
+
+    'customerPayments', coalesce((select jsonb_agg(jsonb_build_object(
+      'id', id, 'customerId', customer_id, 'customerName', customer_name, 'amount', amount, 'date', date, 'notes', notes
+    )) from customer_payments), '[]'::jsonb),
 
     'heldSales', coalesce((select jsonb_agg(
       jsonb_build_object(
@@ -813,10 +861,10 @@ set search_path = public
 as $$
 begin
   delete from items where true;
-  insert into items (id, name, barcode, category, price, cost, stock, unit, low_stock)
+  insert into items (id, name, barcode, category, price, cost, stock, unit, low_stock, expiry)
   select x->>'id', x->>'name', coalesce(x->>'barcode',''), coalesce(x->>'category',''),
          coalesce((x->>'price')::numeric,0), coalesce((x->>'cost')::numeric,0), coalesce((x->>'stock')::numeric,0),
-         coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0)
+         coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0), coalesce(x->>'expiry','')
   from jsonb_array_elements(items) x;
 end;
 $$;
@@ -907,6 +955,35 @@ begin
   select x->>'id', nullif(x->>'date','')::date, coalesce(x->>'period',''), coalesce(x->>'category',''),
          coalesce((x->>'amount')::numeric,0), coalesce(x->>'notes','')
   from jsonb_array_elements(expenses) x;
+end;
+$$;
+
+create or replace function sync_replace_customers(customers jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from customers where true;
+  insert into customers (id, name, phone, notes, balance)
+  select x->>'id', x->>'name', coalesce(x->>'phone',''), coalesce(x->>'notes',''), coalesce((x->>'balance')::numeric,0)
+  from jsonb_array_elements(customers) x;
+end;
+$$;
+
+create or replace function sync_replace_customer_payments("customerPayments" jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from customer_payments where true;
+  insert into customer_payments (id, customer_id, customer_name, amount, date, notes)
+  select x->>'id', x->>'customerId', coalesce(x->>'customerName',''), coalesce((x->>'amount')::numeric,0),
+         nullif(x->>'date','')::date, coalesce(x->>'notes','')
+  from jsonb_array_elements("customerPayments") x;
 end;
 $$;
 
@@ -1001,6 +1078,8 @@ grant execute on function sync_replace_suppliers(jsonb) to anon;
 grant execute on function sync_replace_cashiers(jsonb) to anon;
 grant execute on function sync_replace_purchases(jsonb) to anon;
 grant execute on function sync_replace_expenses(jsonb) to anon;
+grant execute on function sync_replace_customers(jsonb) to anon;
+grant execute on function sync_replace_customer_payments(jsonb) to anon;
 grant execute on function sync_replace_held_sales(jsonb) to anon;
 grant execute on function sync_replace_shifts(jsonb) to anon;
 grant execute on function sync_replace_active_shift(jsonb) to anon;

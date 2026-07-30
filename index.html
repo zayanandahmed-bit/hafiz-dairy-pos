@@ -86,8 +86,8 @@
   .empty{color:var(--muted);text-align:center;padding:20px;font-size:14px;}
   .toast{position:fixed;bottom:20px;right:20px;background:#111827;color:#fff;padding:12px 18px;border-radius:8px;font-size:14px;opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none;z-index:999;}
   .toast.show{opacity:1;transform:translateY(0);}
-  #receiptModal,#cameraModal,#proofModal,#cashierModal,#heldSalesModal,#refundModal,#labelModal,#shiftCloseModal,#scanSheetModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);align-items:center;justify-content:center;z-index:1000;padding:20px;}
-  #receiptModal.show,#cameraModal.show,#proofModal.show,#cashierModal.show,#heldSalesModal.show,#refundModal.show,#labelModal.show,#shiftCloseModal.show,#scanSheetModal.show{display:flex;}
+  #receiptModal,#cameraModal,#proofModal,#cashierModal,#heldSalesModal,#refundModal,#labelModal,#shiftCloseModal,#scanSheetModal,#customerPaymentModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);align-items:center;justify-content:center;z-index:1000;padding:20px;}
+  #receiptModal.show,#cameraModal.show,#proofModal.show,#cashierModal.show,#heldSalesModal.show,#refundModal.show,#labelModal.show,#shiftCloseModal.show,#scanSheetModal.show,#customerPaymentModal.show{display:flex;}
   .cashier-row,.held-row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;}
   .cashier-row.active{border-color:var(--primary);background:rgba(37,99,235,.08);}
   .receipt-paper{background:#fff;color:#111;width:320px;max-height:85vh;overflow-y:auto;padding:16px;font-family:'Courier New',monospace;font-size:12px;border-radius:4px;}
@@ -176,6 +176,7 @@
     <button class="nav-btn" data-view="inventory"><span class="nav-icon">📦</span> Inventory</button>
     <button class="nav-btn" data-view="itemCatalog"><span class="nav-icon">🗂️</span> Item Database</button>
     <button class="nav-btn" data-view="purchases"><span class="nav-icon">🚚</span> Purchases</button>
+    <button class="nav-btn" data-view="customers"><span class="nav-icon">🤝</span> Customers (Udhaar)</button>
     <button class="nav-btn" data-view="sales"><span class="nav-icon">📈</span> Sales History</button>
     <button class="nav-btn" data-view="financials"><span class="nav-icon">💰</span> Financials</button>
     <button class="nav-btn" data-view="settings"><span class="nav-icon">⚙️</span> Settings</button>
@@ -235,6 +236,30 @@
         <div><div class="label">Total Categories</div><div style="font-size:18px;font-weight:bold;" id="statTotalCats">-</div></div>
         <div><div class="label">Items Without Barcode</div><div style="font-size:18px;font-weight:bold;" id="statNoBarcode">-</div></div>
       </div>
+    </div>
+
+    <div class="panel">
+      <div class="flex-between">
+        <h2>Near Expiry / Expired</h2>
+        <span class="hint">Items expiring within 14 days, soonest first.</span>
+      </div>
+      <table>
+        <thead><tr><th>Item</th><th>Stock</th><th>Expiry Date</th><th>Status</th></tr></thead>
+        <tbody id="nearExpiryBody"></tbody>
+      </table>
+      <div id="nearExpiryEmpty" class="empty" style="display:none;">Nothing expiring soon.</div>
+    </div>
+
+    <div class="panel">
+      <div class="flex-between">
+        <h2>Reorder List</h2>
+        <span class="hint">Items at or below their low-stock threshold.</span>
+      </div>
+      <table>
+        <thead><tr><th>Item</th><th>Current Stock</th><th>Low Stock Threshold</th><th>Status</th></tr></thead>
+        <tbody id="reorderBody"></tbody>
+      </table>
+      <div id="reorderEmpty" class="empty" style="display:none;">Nothing needs restocking right now.</div>
     </div>
 
     <div class="panel">
@@ -328,7 +353,12 @@
             <option>Cash</option>
             <option>Card</option>
             <option>Mobile Wallet</option>
+            <option>Credit (Udhaar)</option>
           </select>
+        </div>
+        <div style="margin-top:14px;display:none;" id="creditCustomerBox">
+          <label>Customer *</label>
+          <select id="creditCustomerSelect"></select>
         </div>
         <div style="margin-top:14px;">
           <label>Cash Received</label>
@@ -407,6 +437,10 @@
           <div>
             <label>Low Stock Alert Below</label>
             <input type="number" id="itemLowStock" step="1" min="0" value="5">
+          </div>
+          <div>
+            <label>Expiry Date (optional)</label>
+            <input type="date" id="itemExpiry" title="For perishables — shows up in the Dashboard's Near Expiry alert.">
           </div>
         </div>
         <div class="row" style="margin-top:12px;">
@@ -505,6 +539,9 @@
           <div><label>Cost Per Unit *</label><input type="number" id="purchaseCost" min="0" step="0.01" required></div>
           <div><label>Proof of Purchase (receipt / invoice image)</label><input type="file" id="purchaseProof" accept="image/*"></div>
         </div>
+        <div class="grid grid-3" style="margin-top:10px;">
+          <div><label>Expiry Date (optional)</label><input type="date" id="purchaseExpiry" title="Sets/updates this item's expiry date on the Dashboard's Near Expiry alert."></div>
+        </div>
         <div id="proofPreviewBox" style="margin-top:8px;display:none;">
           <img id="proofPreviewImg" src="" style="max-width:120px;max-height:120px;border-radius:6px;border:1px solid var(--border);">
           <button type="button" class="btn secondary small" id="removeProofBtn">Remove</button>
@@ -538,6 +575,38 @@
         <span id="purchasePageLabel" style="font-size:13px;color:var(--muted);">Page 1 of 1</span>
         <button class="btn secondary small" id="purchaseNextPageBtn">Next Page →</button>
       </div>
+    </div>
+  </div>
+
+  <!-- CUSTOMERS (UDHAAR/CREDIT) VIEW -->
+  <div class="view" id="view-customers">
+    <div class="panel">
+      <h2 id="customerFormTitle">Add Customer</h2>
+      <form id="customerForm">
+        <input type="hidden" id="customerId">
+        <div class="grid grid-3">
+          <div><label>Name *</label><input id="customerName2" required placeholder="e.g. Aslam Bhai"></div>
+          <div><label>Phone</label><input id="customerPhone" placeholder="03xx-xxxxxxx"></div>
+          <div><label>Notes</label><input id="customerNotes" placeholder="Optional"></div>
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <button type="submit" class="btn" id="customerSaveBtn">Add Customer</button>
+          <button type="button" class="btn secondary" id="customerCancelBtn" style="display:none;">Cancel Edit</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="panel">
+      <div class="flex-between">
+        <h2>Customers (<span id="customerCount">0</span>)</h2>
+        <span class="hint">Total outstanding: <span id="customerTotalOwed">Rs 0</span></span>
+      </div>
+      <input id="customerSearch" placeholder="Search by name or phone..." style="margin-bottom:10px;">
+      <table>
+        <thead><tr><th>Name</th><th>Phone</th><th>Notes</th><th>Balance Owed</th><th></th></tr></thead>
+        <tbody id="customerBody"></tbody>
+      </table>
+      <div id="customerEmpty" class="empty" style="display:none;">No customers yet — add your first one above.</div>
     </div>
   </div>
 
@@ -840,6 +909,22 @@
   </div>
 </div>
 
+<div id="customerPaymentModal">
+  <div class="panel" style="width:380px;max-width:90vw;">
+    <h2 id="customerPaymentModalTitle">Log Payment</h2>
+    <input type="hidden" id="cpCustomerId">
+    <div class="grid grid-2">
+      <div><label>Amount Received *</label><input type="number" id="cpAmount" min="0.01" step="0.01" required></div>
+      <div><label>Date *</label><input type="date" id="cpDate" required></div>
+    </div>
+    <div style="margin-top:10px;"><label>Notes</label><input id="cpNotes" placeholder="Optional"></div>
+    <div class="modal-actions">
+      <button class="btn" id="cpSaveBtn">Save Payment</button>
+      <button class="btn secondary" id="cpCancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div id="scanSheetModal">
   <div class="panel" style="width:720px;max-width:95vw;max-height:88vh;overflow-y:auto;">
     <h2>Scan Inventory Sheet</h2>
@@ -861,7 +946,7 @@
       <datalist id="scanCatList"></datalist>
       <div style="overflow-x:auto;">
         <table class="cart-table" id="scanSheetTable">
-          <thead><tr><th></th><th>Item Name</th><th>Category</th><th>Buying Price</th><th>Price</th><th>Stock</th><th>Unit</th></tr></thead>
+          <thead><tr><th></th><th>Item Name</th><th>Category</th><th>Buying Price</th><th>Price</th><th>Stock</th><th>Unit</th><th>Expiry</th></tr></thead>
           <tbody id="scanSheetTbody"></tbody>
         </table>
       </div>
@@ -1081,6 +1166,8 @@
     items: [],
     itemCatalog: [],
     expenses: [],
+    customers: [],
+    customerPayments: [],
     sales: [],
     categories: [],
     suppliers: [],
@@ -1110,6 +1197,8 @@
   function saveItems(){ saveLocalState(); pushDomainInstant("items"); }
   function saveItemCatalog(){ saveLocalState(); pushDomainInstant("itemCatalog"); }
   function saveExpenses(){ saveLocalState(); pushDomainInstant("expenses"); }
+  function saveCustomers(){ saveLocalState(); pushDomainInstant("customers"); }
+  function saveCustomerPayments(){ saveLocalState(); pushDomainInstant("customerPayments"); }
   function saveSales(){ saveLocalState(); }
   function saveCats(){ saveLocalState(); pushDomainInstant("categories"); }
   function saveSettings(){ saveLocalState(); pushDomainInstant("settings"); }
@@ -1139,7 +1228,8 @@
         items: state.items, itemCatalog: state.itemCatalog, expenses: state.expenses, categories: state.categories, suppliers: state.suppliers,
         purchases: state.purchases, cashiers: state.cashiers, heldSales: state.heldSales,
         shifts: state.shifts, activeShift: state.activeShift, settings: state.settings,
-        sales: state.sales, refunds: state.refunds, receiptCounter: state.receiptCounter
+        sales: state.sales, refunds: state.refunds, receiptCounter: state.receiptCounter,
+        customers: state.customers, customerPayments: state.customerPayments
       };
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(snapshot));
     }catch(e){ /* storage full/unavailable — cloud push is still attempted regardless */ }
@@ -1215,7 +1305,9 @@
       refunds: state.refunds,
       shifts: state.shifts,
       activeShift: state.activeShift,
-      receiptCounter: state.receiptCounter || 1000
+      receiptCounter: state.receiptCounter || 1000,
+      customers: state.customers,
+      customerPayments: state.customerPayments
     };
     return fetch(supabaseUrl("sync_push"), {
       method: "POST",
@@ -1336,7 +1428,9 @@
     heldSales: "sync_replace_held_sales",
     shifts: "sync_replace_shifts",
     activeShift: "sync_replace_active_shift",
-    settings: "sync_replace_settings"
+    settings: "sync_replace_settings",
+    customers: "sync_replace_customers",
+    customerPayments: "sync_replace_customer_payments"
   };
   var domainPushTimers = {};
   var domainFlushInFlight = {};
@@ -1480,6 +1574,8 @@
       state.itemCatalog = data.itemCatalog.map(function(it){ it.barcode = str(it.barcode); return it; });
     }
     if(data.expenses) { state.expenses = data.expenses; }
+    if(data.customers) { state.customers = data.customers; }
+    if(data.customerPayments) { state.customerPayments = data.customerPayments; }
     if(data.sales) {
       state.sales = data.sales.map(function(s){
         (s.lines||[]).forEach(function(l){ l.barcode = str(l.barcode); });
@@ -1529,6 +1625,8 @@
     renderPurchaseTable();
     renderSales();
     renderDashboard();
+    renderCustomers();
+    populateCreditCustomerSelect();
     loadSettingsForm();
   }
 
@@ -1566,6 +1664,7 @@
     inventory: { title: "Inventory", sub: "Manage items and categories" },
     itemCatalog: { title: "Item Database", sub: "Premade product catalog — add items into your live Inventory as you stock them" },
     purchases: { title: "Purchases", sub: "Track suppliers and stock-in records with proof of purchase" },
+    customers: { title: "Customers (Udhaar)", sub: "Track customer credit balances and payments" },
     sales: { title: "Sales History", sub: "Browse and reprint past receipts" },
     financials: { title: "Financials", sub: "Money in vs money out, and your net profit" },
     settings: { title: "Settings", sub: "Store info, defaults, and data management" }
@@ -1584,6 +1683,7 @@
       if(btn.dataset.view === "inventory") renderInventory();
       if(btn.dataset.view === "itemCatalog") renderItemCatalog();
       if(btn.dataset.view === "purchases") renderPurchasesView();
+      if(btn.dataset.view === "customers") renderCustomers();
       if(btn.dataset.view === "sales") loadSalesHistoryRange();
       if(btn.dataset.view === "financials") loadFinancialsRange();
       if(btn.dataset.view === "billing") document.getElementById("scanInput").focus();
@@ -1738,6 +1838,7 @@
     var stock = parseInt(document.getElementById("itemStock").value, 10);
     var unit = document.getElementById("itemUnit").value.trim() || "pcs";
     var lowStock = parseInt(document.getElementById("itemLowStock").value, 10) || 0;
+    var expiry = document.getElementById("itemExpiry").value || "";
 
     if(!name || isNaN(cost) || isNaN(price) || isNaN(stock) || !category){
       toast("Please fill in required fields.");
@@ -1757,13 +1858,14 @@
         var previousStock = item.stock || 0;
         item.name = name; item.barcode = barcode; item.category = category;
         item.price = price; item.cost = cost; item.stock = stock; item.unit = unit; item.lowStock = lowStock;
+        if(expiry) item.expiry = expiry;
         if(stock > previousStock) logDirectStockPurchase(item, stock - previousStock, cost);
       }
       toast("Item updated.");
     } else {
       var newItem = {
         id: uid(), name: name, barcode: barcode, category: category,
-        price: price, cost: cost, stock: stock, unit: unit, lowStock: lowStock
+        price: price, cost: cost, stock: stock, unit: unit, lowStock: lowStock, expiry: expiry
       };
       state.items.push(newItem);
       if(stock > 0) logDirectStockPurchase(newItem, stock, cost);
@@ -1782,6 +1884,7 @@
     document.getElementById("itemId").value = "";
     document.getElementById("itemUnit").value = "pcs";
     document.getElementById("itemLowStock").value = state.settings.defaultLowStock;
+    document.getElementById("itemExpiry").value = "";
     document.getElementById("invFormTitle").textContent = "Add New Item";
     document.getElementById("invSaveBtn").textContent = "Add Item";
     invCancelBtn.style.display = "none";
@@ -1834,6 +1937,7 @@
         '<td><input type="number" step="0.01" min="0" class="scanRowPrice" value="'+row.price+'" style="width:80px;"></td>' +
         '<td><input type="number" step="1" min="0" class="scanRowStock" value="'+row.stock+'" style="width:70px;"></td>' +
         '<td><input class="scanRowUnit" value="'+row.unit+'" style="width:60px;"></td>' +
+        '<td><input type="date" class="scanRowExpiry" style="width:130px;" title="Optional"></td>' +
       '</tr>';
     }).join("");
   }
@@ -1905,10 +2009,11 @@
       var price = parseFloat(tr.querySelector(".scanRowPrice").value) || 0;
       var stock = parseInt(tr.querySelector(".scanRowStock").value, 10) || 0;
       var unit = tr.querySelector(".scanRowUnit").value.trim() || "pcs";
+      var expiry = tr.querySelector(".scanRowExpiry").value || "";
       if(state.categories.indexOf(category) === -1) state.categories.push(category);
       var scannedItem = {
         id: uid(), name: name, barcode: "", category: category,
-        price: price, cost: cost, stock: stock, unit: unit, lowStock: state.settings.defaultLowStock || 5
+        price: price, cost: cost, stock: stock, unit: unit, lowStock: state.settings.defaultLowStock || 5, expiry: expiry
       };
       state.items.push(scannedItem);
       if(stock > 0 && cost > 0) logDirectStockPurchase(scannedItem, stock, cost);
@@ -1937,6 +2042,7 @@
     document.getElementById("itemStock").value = item.stock;
     document.getElementById("itemUnit").value = item.unit || "pcs";
     document.getElementById("itemLowStock").value = item.lowStock || 0;
+    document.getElementById("itemExpiry").value = item.expiry || "";
     document.getElementById("invFormTitle").textContent = "Edit Item: " + item.name;
     document.getElementById("invSaveBtn").textContent = "Save Changes";
     invCancelBtn.style.display = "inline-block";
@@ -1968,6 +2074,20 @@
     return '<span class="badge ok">In stock</span>';
   }
 
+  function daysUntil(dateStr){
+    var ms = new Date(dateStr) - new Date(new Date().toDateString());
+    return Math.round(ms / 86400000);
+  }
+
+  function expiryCell(it){
+    if(!it.expiry) return '<span style="color:var(--muted);">—</span>';
+    var days = daysUntil(it.expiry);
+    var label = it.expiry;
+    if(days < 0) return '<span class="badge out">' + label + ' (expired)</span>';
+    if(days <= 14) return '<span class="badge low">' + label + ' (' + days + 'd)</span>';
+    return label;
+  }
+
   function itemRow(it){
     return "<tr>" +
       "<td>" + escapeHtml(it.name) + "</td>" +
@@ -1975,6 +2095,7 @@
       "<td>" + money(it.price) + "</td>" +
       "<td>" + it.stock + " " + escapeHtml(it.unit||"") + "</td>" +
       "<td>" + stockBadge(it) + "</td>" +
+      "<td>" + expiryCell(it) + "</td>" +
       "<td>" +
         '<button class="btn secondary small" onclick="POS.editItem(\''+it.id+'\')">Edit</button> ' +
         '<button class="btn secondary small" onclick="POS.openLabelModal(\''+it.id+'\')">🏷️ Label</button> ' +
@@ -2010,7 +2131,7 @@
     }
 
     if(!groupByCategory){
-      container.innerHTML = "<table><thead><tr><th>Name</th><th>Barcode</th><th>Price</th><th>Stock</th><th>Status</th><th></th></tr></thead><tbody>" +
+      container.innerHTML = "<table><thead><tr><th>Name</th><th>Barcode</th><th>Price</th><th>Stock</th><th>Status</th><th>Expiry</th><th></th></tr></thead><tbody>" +
         list.map(itemRow).join("") + "</tbody></table>";
       return;
     }
@@ -2028,7 +2149,7 @@
       var arrow = state.collapsedCats[cat] ? "▸" : "▾";
       html += '<div class="cat-section">' +
         '<div class="cat-header" onclick="POS.toggleCatCollapse(\''+cat.replace(/'/g,"\\'")+'\')"><span>'+arrow+' '+escapeHtml(cat)+' <span style="color:var(--muted);font-weight:normal;">('+groups[cat].length+')</span></span></div>' +
-        '<div class="cat-body '+collapsed+'"><table><thead><tr><th>Name</th><th>Barcode</th><th>Price</th><th>Stock</th><th>Status</th><th></th></tr></thead><tbody>' +
+        '<div class="cat-body '+collapsed+'"><table><thead><tr><th>Name</th><th>Barcode</th><th>Price</th><th>Stock</th><th>Status</th><th>Expiry</th><th></th></tr></thead><tbody>' +
         groups[cat].map(itemRow).join("") + '</tbody></table></div></div>';
     });
     container.innerHTML = html;
@@ -2329,6 +2450,7 @@
     var date = document.getElementById("purchaseDate").value || new Date().toISOString().slice(0,10);
     var notes = document.getElementById("purchaseNotes").value.trim();
     var addStock = document.getElementById("purchaseAddStock").checked;
+    var expiry = document.getElementById("purchaseExpiry").value || "";
 
     if(!supplier || !item || isNaN(qty) || qty <= 0 || isNaN(cost) || cost < 0){
       toast("Please fill in all required fields correctly.");
@@ -2353,12 +2475,14 @@
 
     if(addStock){
       item.stock = (item.stock || 0) + qty;
+      if(expiry) item.expiry = expiry;
       saveItems();
     }
 
     document.getElementById("purchaseForm").reset();
     document.getElementById("purchaseDate").value = new Date().toISOString().slice(0,10);
     document.getElementById("purchaseAddStock").checked = true;
+    document.getElementById("purchaseExpiry").value = "";
     pendingProofDataUrl = null; pendingProofName = null;
     document.getElementById("proofPreviewBox").style.display = "none";
 
@@ -2432,6 +2556,164 @@
     purchasePageNumber--;
     renderPurchaseTable();
   });
+
+  // ================= CUSTOMERS (UDHAAR / CREDIT ACCOUNTS) =================
+  function customerBalance(customer){
+    return customer.balance || 0;
+  }
+
+  function renderCustomers(){
+    populateCreditCustomerSelect();
+    var q = document.getElementById("customerSearch").value.trim().toLowerCase();
+    var list = state.customers.filter(function(c){
+      if(!q) return true;
+      var hay = (c.name + " " + (c.phone||"")).toLowerCase();
+      return hay.indexOf(q) !== -1;
+    }).sort(function(a,b){ return customerBalance(b) - customerBalance(a); });
+
+    document.getElementById("customerCount").textContent = state.customers.length;
+    var totalOwed = state.customers.reduce(function(s,c){ return s + customerBalance(c); }, 0);
+    document.getElementById("customerTotalOwed").textContent = money(totalOwed);
+
+    var body = document.getElementById("customerBody");
+    var empty = document.getElementById("customerEmpty");
+    empty.style.display = list.length === 0 ? "block" : "none";
+    body.innerHTML = list.map(function(c){
+      var bal = customerBalance(c);
+      return "<tr>" +
+        "<td>" + escapeHtml(c.name) + "</td>" +
+        "<td>" + escapeHtml(c.phone||"") + "</td>" +
+        "<td>" + escapeHtml(c.notes||"") + "</td>" +
+        "<td>" + (bal > 0 ? '<span class="badge low">' + money(bal) + '</span>' : money(bal)) + "</td>" +
+        "<td>" +
+          '<button class="btn small" onclick="POS.openCustomerPaymentModal(\''+c.id+'\')">Log Payment</button> ' +
+          '<button class="btn secondary small" onclick="POS.editCustomer(\''+c.id+'\')">Edit</button> ' +
+          '<button class="btn danger small" onclick="POS.deleteCustomer(\''+c.id+'\')">Delete</button>' +
+        "</td>" +
+      "</tr>";
+    }).join("");
+  }
+  document.getElementById("customerSearch").addEventListener("input", renderCustomers);
+
+  document.getElementById("customerForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var id = document.getElementById("customerId").value;
+    var name = document.getElementById("customerName2").value.trim();
+    var phone = document.getElementById("customerPhone").value.trim();
+    var notes = document.getElementById("customerNotes").value.trim();
+    if(!name){ toast("Please enter a customer name."); return; }
+
+    if(id){
+      var c = state.customers.find(function(x){ return x.id === id; });
+      if(c){ c.name = name; c.phone = phone; c.notes = notes; }
+      toast("Customer updated.");
+    } else {
+      state.customers.push({ id: uid(), name: name, phone: phone, notes: notes, balance: 0 });
+      toast("Customer added.");
+    }
+    saveCustomers();
+    resetCustomerForm();
+    renderCustomers();
+  });
+
+  document.getElementById("customerCancelBtn").addEventListener("click", resetCustomerForm);
+
+  function resetCustomerForm(){
+    document.getElementById("customerForm").reset();
+    document.getElementById("customerId").value = "";
+    document.getElementById("customerFormTitle").textContent = "Add Customer";
+    document.getElementById("customerSaveBtn").textContent = "Add Customer";
+    document.getElementById("customerCancelBtn").style.display = "none";
+  }
+
+  function editCustomer(id){
+    var c = state.customers.find(function(x){ return x.id === id; });
+    if(!c) return;
+    document.getElementById("customerId").value = c.id;
+    document.getElementById("customerName2").value = c.name;
+    document.getElementById("customerPhone").value = c.phone || "";
+    document.getElementById("customerNotes").value = c.notes || "";
+    document.getElementById("customerFormTitle").textContent = "Edit Customer: " + c.name;
+    document.getElementById("customerSaveBtn").textContent = "Save Changes";
+    document.getElementById("customerCancelBtn").style.display = "inline-block";
+    window.scrollTo({top:0, behavior:"smooth"});
+  }
+
+  function deleteCustomer(id){
+    var c = state.customers.find(function(x){ return x.id === id; });
+    if(!c) return;
+    if(customerBalance(c) > 0){
+      if(!confirm('"' + c.name + '" still owes ' + money(customerBalance(c)) + '. Delete anyway?')) return;
+    } else if(!confirm('Delete customer "' + c.name + '"?')) return;
+    state.customers = state.customers.filter(function(x){ return x.id !== id; });
+    saveCustomers();
+    renderCustomers();
+    toast("Customer deleted.");
+  }
+
+  function populateCreditCustomerSelect(){
+    var sel = document.getElementById("creditCustomerSelect");
+    if(!sel) return;
+    var current = sel.value;
+    sel.innerHTML = '<option value="">Select customer...</option>' +
+      state.customers.slice().sort(function(a,b){ return a.name.localeCompare(b.name); }).map(function(c){
+        return '<option value="'+c.id+'">' + escapeHtml(c.name) + (c.phone ? " (" + escapeHtml(c.phone) + ")" : "") + '</option>';
+      }).join("");
+    if(state.customers.some(function(c){ return c.id === current; })) sel.value = current;
+  }
+
+  document.getElementById("cpCancelBtn").addEventListener("click", function(){
+    document.getElementById("customerPaymentModal").classList.remove("show");
+  });
+
+  function openCustomerPaymentModal(customerId){
+    var c = state.customers.find(function(x){ return x.id === customerId; });
+    if(!c) return;
+    document.getElementById("cpCustomerId").value = customerId;
+    document.getElementById("customerPaymentModalTitle").textContent = "Log Payment: " + c.name + " (owes " + money(customerBalance(c)) + ")";
+    document.getElementById("cpAmount").value = "";
+    document.getElementById("cpDate").value = new Date().toISOString().slice(0,10);
+    document.getElementById("cpNotes").value = "";
+    document.getElementById("customerPaymentModal").classList.add("show");
+  }
+
+  document.getElementById("cpSaveBtn").addEventListener("click", function(){
+    var customerId = document.getElementById("cpCustomerId").value;
+    var c = state.customers.find(function(x){ return x.id === customerId; });
+    if(!c) return;
+    var amount = parseFloat(document.getElementById("cpAmount").value);
+    var date = document.getElementById("cpDate").value;
+    var notes = document.getElementById("cpNotes").value.trim();
+    if(isNaN(amount) || amount <= 0 || !date){ toast("Please enter a valid amount and date."); return; }
+
+    var payment = { id: uid(), customerId: customerId, customerName: c.name, amount: amount, date: date, notes: notes };
+    state.customerPayments.push(payment);
+    c.balance = Math.max(0, customerBalance(c) - amount);
+    saveCustomerPayments();
+    saveCustomers();
+    renderCustomers();
+    document.getElementById("customerPaymentModal").classList.remove("show");
+    showCustomerPaymentReceipt(payment, c);
+    toast("Payment logged.");
+  });
+
+  function showCustomerPaymentReceipt(payment, customer){
+    var html = "";
+    html += '<div style="text-align:center;font-weight:bold;font-size:14px;">PAYMENT RECEIPT</div>';
+    html += '<div style="text-align:center;">' + escapeHtml(state.settings.storeName || "") + '</div>';
+    html += "<hr>";
+    html += '<div class="rline"><span>Customer</span><span>'+escapeHtml(customer.name)+'</span></div>';
+    html += '<div class="rline"><span>Date</span><span>'+payment.date+'</span></div>';
+    html += "<hr>";
+    html += '<div class="rline" style="font-weight:bold;font-size:14px;"><span>AMOUNT RECEIVED</span><span>'+money(payment.amount)+'</span></div>';
+    html += '<div class="rline"><span>Remaining Balance</span><span>'+money(customerBalance(customer))+'</span></div>';
+    html += "<hr>";
+    if(payment.notes) html += '<div class="rline"><span>Notes</span><span>'+escapeHtml(payment.notes)+'</span></div>';
+    html += '<div style="text-align:center;">Thank you!</div>';
+
+    document.getElementById("receiptContent").innerHTML = html;
+    document.getElementById("receiptModal").classList.add("show");
+  }
 
   // ================= ITEM DATABASE (premade catalog, not live inventory) =================
   var CATALOG_PAGE_SIZE = 50;
@@ -3163,6 +3445,12 @@
   document.getElementById("taxInput").addEventListener("input", updateTotals);
   document.getElementById("cashReceived").addEventListener("input", updateTotals);
 
+  document.getElementById("paymentMethod").addEventListener("change", function(){
+    var isCredit = this.value === "Credit (Udhaar)";
+    document.getElementById("creditCustomerBox").style.display = isCredit ? "block" : "none";
+    if(isCredit) populateCreditCustomerSelect();
+  });
+
   document.getElementById("checkoutBtn").addEventListener("click", function(){
     if(state.cart.length === 0){ toast("Cart is empty."); return; }
     var totals = updateTotals();
@@ -3171,6 +3459,13 @@
 
     if(payMethod === "Cash" && (isNaN(cash) || cash < totals.grand)){
       if(!confirm("Cash received is less than the total, or not entered. Complete sale anyway?")) return;
+    }
+
+    var creditCustomer = null;
+    if(payMethod === "Credit (Udhaar)"){
+      var creditCustomerId = document.getElementById("creditCustomerSelect").value;
+      creditCustomer = state.customers.find(function(c){ return c.id === creditCustomerId; });
+      if(!creditCustomer){ toast("Select a customer for this credit (udhaar) sale."); return; }
     }
 
     var lines = state.cart.map(function(line){
@@ -3187,7 +3482,8 @@
       id: uid(),
       receiptNo: nextReceiptNo(),
       date: new Date().toISOString(),
-      customer: document.getElementById("customerName").value.trim() || "Walk-in customer",
+      customer: creditCustomer ? creditCustomer.name : (document.getElementById("customerName").value.trim() || "Walk-in customer"),
+      customerId: creditCustomer ? creditCustomer.id : null,
       cashier: currentCashierName(),
       payment: payMethod,
       cash: isNaN(cash) ? null : cash,
@@ -3203,6 +3499,12 @@
     saveSales();
     pushSaleInstant(sale);
 
+    if(creditCustomer){
+      creditCustomer.balance = (creditCustomer.balance || 0) + totals.grand;
+      saveCustomers();
+      renderCustomers();
+    }
+
     showReceipt(sale);
 
     state.cart = [];
@@ -3210,6 +3512,8 @@
     document.getElementById("cashReceived").value = "";
     document.getElementById("discountInput").value = state.settings.defaultDiscount;
     document.getElementById("taxInput").value = state.settings.defaultTax;
+    document.getElementById("paymentMethod").value = "Cash";
+    document.getElementById("creditCustomerBox").style.display = "none";
     renderCart();
     renderInventory();
   });
@@ -3897,6 +4201,9 @@
     document.getElementById("statLowStock").textContent = lowStock.length;
     document.getElementById("statOutStock").textContent = outStock.length;
 
+    renderNearExpiry();
+    renderReorderList(lowStock, outStock);
+
     document.getElementById("statTotalItems").textContent = state.items.length;
     document.getElementById("statTotalCats").textContent = state.categories.length;
     document.getElementById("statNoBarcode").textContent = state.items.filter(function(it){ return !it.barcode; }).length;
@@ -3917,6 +4224,31 @@
     }).join("");
 
     renderCashierLog();
+  }
+
+  function renderNearExpiry(){
+    var soon = state.items.filter(function(it){ return it.expiry && daysUntil(it.expiry) <= 14; })
+      .sort(function(a,b){ return daysUntil(a.expiry) - daysUntil(b.expiry); });
+    var body = document.getElementById("nearExpiryBody");
+    var empty = document.getElementById("nearExpiryEmpty");
+    empty.style.display = soon.length === 0 ? "block" : "none";
+    body.innerHTML = soon.map(function(it){
+      var days = daysUntil(it.expiry);
+      var status = days < 0 ? '<span class="badge out">Expired ' + Math.abs(days) + 'd ago</span>' :
+        (days === 0 ? '<span class="badge out">Expires today</span>' : '<span class="badge low">' + days + 'd left</span>');
+      return "<tr><td>" + escapeHtml(it.name) + "</td><td>" + it.stock + " " + escapeHtml(it.unit||"") + "</td><td>" + it.expiry + "</td><td>" + status + "</td></tr>";
+    }).join("");
+  }
+
+  function renderReorderList(lowStock, outStock){
+    var items = outStock.concat(lowStock).sort(function(a,b){ return a.stock - b.stock; });
+    var body = document.getElementById("reorderBody");
+    var empty = document.getElementById("reorderEmpty");
+    empty.style.display = items.length === 0 ? "block" : "none";
+    body.innerHTML = items.map(function(it){
+      var status = it.stock <= 0 ? '<span class="badge out">Out of stock</span>' : '<span class="badge low">Low stock</span>';
+      return "<tr><td>" + escapeHtml(it.name) + "</td><td>" + it.stock + " " + escapeHtml(it.unit||"") + "</td><td>" + (it.lowStock||0) + "</td><td>" + status + "</td></tr>";
+    }).join("");
   }
 
   function renderCashierLog(){
@@ -4471,6 +4803,9 @@
     deleteExpense: deleteExpense,
     showExpenseReceipt: showExpenseReceipt,
     showMonthExpenseReceipt: showMonthExpenseReceipt,
+    editCustomer: editCustomer,
+    deleteCustomer: deleteCustomer,
+    openCustomerPaymentModal: openCustomerPaymentModal,
     addToCart: addToCart,
     changeQty: changeQty,
     setQty: setQty,
