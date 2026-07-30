@@ -97,6 +97,11 @@
   .flex-between{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
   .filter-bar{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
   .filter-bar input,.filter-bar select{width:auto;min-width:160px;}
+  .combo-dropdown{position:absolute;z-index:60;left:0;right:0;top:100%;margin-top:2px;background:var(--panel-bg,#fff);border:1px solid var(--border);border-radius:8px;max-height:240px;overflow-y:auto;box-shadow:0 6px 16px rgba(0,0,0,.15);}
+  .combo-option{padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);}
+  .combo-option:last-child{border-bottom:none;}
+  .combo-option:hover,.combo-option.active{background:rgba(128,128,128,.12);}
+  .combo-empty{padding:10px 12px;font-size:13px;color:var(--muted);}
   .cat-section{margin-bottom:14px;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
   .cat-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(128,128,128,.07);cursor:pointer;font-weight:bold;font-size:13px;}
   .cat-header:hover{background:rgba(128,128,128,.12);}
@@ -169,6 +174,7 @@
     <button class="nav-btn" data-view="dashboard"><span class="nav-icon">📊</span> Dashboard</button>
     <button class="nav-btn active" data-view="billing"><span class="nav-icon">🧾</span> Billing</button>
     <button class="nav-btn" data-view="inventory"><span class="nav-icon">📦</span> Inventory</button>
+    <button class="nav-btn" data-view="itemCatalog"><span class="nav-icon">🗂️</span> Item Database</button>
     <button class="nav-btn" data-view="purchases"><span class="nav-icon">🚚</span> Purchases</button>
     <button class="nav-btn" data-view="sales"><span class="nav-icon">📈</span> Sales History</button>
     <button class="nav-btn" data-view="settings"><span class="nav-icon">⚙️</span> Settings</button>
@@ -423,6 +429,30 @@
     </div>
   </div>
 
+  <!-- ITEM DATABASE VIEW -->
+  <div class="view" id="view-itemCatalog">
+    <div class="panel">
+      <div class="flex-between">
+        <h2>Item Database (<span id="catalogCount">0</span> items)</h2>
+        <span class="hint">Not live inventory — use "Add to Inventory" on an item once you actually stock it.</span>
+      </div>
+      <div class="filter-bar">
+        <input id="catalogSearch" placeholder="Search by name, barcode, or category...">
+        <select id="catalogCatFilter"><option value="all">All categories</option></select>
+      </div>
+      <table>
+        <thead><tr><th>Name</th><th>Barcode</th><th>Category</th><th>Price</th><th></th></tr></thead>
+        <tbody id="catalogBody"></tbody>
+      </table>
+      <div id="catalogEmpty" class="empty" style="display:none;">No catalog items match your search.</div>
+      <div class="row" style="margin-top:10px;align-items:center;">
+        <button class="btn secondary small" id="catalogPrevPageBtn">← Previous Page</button>
+        <span id="catalogPageLabel" style="font-size:13px;color:var(--muted);">Page 1 of 1</span>
+        <button class="btn secondary small" id="catalogNextPageBtn">Next Page →</button>
+      </div>
+    </div>
+  </div>
+
   <!-- PURCHASES VIEW -->
   <div class="view" id="view-purchases">
     <div class="panel">
@@ -447,9 +477,11 @@
             <label>Supplier *</label>
             <select id="purchaseSupplier" required></select>
           </div>
-          <div>
+          <div style="position:relative;">
             <label>Item *</label>
-            <select id="purchaseItem" required></select>
+            <input id="purchaseItemSearch" autocomplete="off" placeholder="Type to search items...">
+            <input type="hidden" id="purchaseItem">
+            <div id="purchaseItemDropdown" class="combo-dropdown" style="display:none;"></div>
           </div>
           <div>
             <label>Purchase Date *</label>
@@ -960,6 +992,7 @@
   // finishes its initial (empty) render; see the bootstrap at the bottom.
   var state = {
     items: [],
+    itemCatalog: [],
     sales: [],
     categories: [],
     suppliers: [],
@@ -987,6 +1020,7 @@
   };
 
   function saveItems(){ saveLocalState(); pushDomainInstant("items"); }
+  function saveItemCatalog(){ saveLocalState(); pushDomainInstant("itemCatalog"); }
   function saveSales(){ saveLocalState(); }
   function saveCats(){ saveLocalState(); pushDomainInstant("categories"); }
   function saveSettings(){ saveLocalState(); pushDomainInstant("settings"); }
@@ -1013,7 +1047,7 @@
   function saveLocalState(){
     try{
       var snapshot = {
-        items: state.items, categories: state.categories, suppliers: state.suppliers,
+        items: state.items, itemCatalog: state.itemCatalog, categories: state.categories, suppliers: state.suppliers,
         purchases: state.purchases, cashiers: state.cashiers, heldSales: state.heldSales,
         shifts: state.shifts, activeShift: state.activeShift, settings: state.settings,
         sales: state.sales, refunds: state.refunds, receiptCounter: state.receiptCounter
@@ -1080,6 +1114,7 @@
     setCloudStatus("syncing");
     var payload = {
       items: state.items,
+      itemCatalog: state.itemCatalog,
       sales: state.sales,
       categories: state.categories,
       settings: state.settings,
@@ -1202,6 +1237,7 @@
   // into one request per domain instead of one per field change.
   var DOMAIN_RPC = {
     items: "sync_replace_items",
+    itemCatalog: "sync_replace_item_catalog",
     categories: "sync_replace_categories",
     suppliers: "sync_replace_suppliers",
     purchases: "sync_replace_purchases",
@@ -1349,6 +1385,9 @@
     if(data.items) {
       state.items = data.items.map(function(it){ it.barcode = str(it.barcode); return it; });
     }
+    if(data.itemCatalog) {
+      state.itemCatalog = data.itemCatalog.map(function(it){ it.barcode = str(it.barcode); return it; });
+    }
     if(data.sales) {
       state.sales = data.sales.map(function(s){
         (s.lines||[]).forEach(function(l){ l.barcode = str(l.barcode); });
@@ -1391,6 +1430,7 @@
     updateHeldCount();
     renderCart();
     renderInventory();
+    renderItemCatalog();
     renderSupplierUI();
     populatePurchaseItemSelect();
     renderPurchaseTable();
@@ -1431,6 +1471,7 @@
     dashboard: { title: "Dashboard", sub: "Overview of your store's performance" },
     billing: { title: "Billing", sub: "Scan or search items to build a sale" },
     inventory: { title: "Inventory", sub: "Manage items and categories" },
+    itemCatalog: { title: "Item Database", sub: "Premade product catalog — add items into your live Inventory as you stock them" },
     purchases: { title: "Purchases", sub: "Track suppliers and stock-in records with proof of purchase" },
     sales: { title: "Sales History", sub: "Browse and reprint past receipts" },
     settings: { title: "Settings", sub: "Store info, defaults, and data management" }
@@ -1447,6 +1488,7 @@
       document.getElementById("viewTitle").textContent = meta.title;
       document.getElementById("viewSubtitle").textContent = meta.sub;
       if(btn.dataset.view === "inventory") renderInventory();
+      if(btn.dataset.view === "itemCatalog") renderItemCatalog();
       if(btn.dataset.view === "purchases") renderPurchasesView();
       if(btn.dataset.view === "sales") loadSalesHistoryRange();
       if(btn.dataset.view === "billing") document.getElementById("scanInput").focus();
@@ -1974,12 +2016,92 @@
     if(state.suppliers.some(function(s){ return s.id === current; })) sel.value = current;
   }
 
+  // Keeps the search box's displayed text lined up with the hidden value —
+  // called after loads/resets, since the combobox itself no longer needs a
+  // full option list built up front (it filters state.items live as you type).
   function populatePurchaseItemSelect(){
-    var sel = document.getElementById("purchaseItem");
-    var current = sel.value;
-    sel.innerHTML = state.items.map(function(it){ return '<option value="'+it.id+'">'+escapeHtml(it.name)+' ('+escapeHtml(it.category||"")+')</option>'; }).join("");
-    if(state.items.some(function(it){ return it.id === current; })) sel.value = current;
+    var hidden = document.getElementById("purchaseItem");
+    var current = state.items.find(function(it){ return it.id === hidden.value; });
+    if(!current){
+      hidden.value = "";
+      document.getElementById("purchaseItemSearch").value = "";
+    }
   }
+
+  // ================= PURCHASES: searchable item combobox =================
+  // A type-to-search dropdown instead of a plain <select> — Purchases can
+  // pull from potentially thousands of inventory items, and a flat dropdown
+  // is unusable at that size. Matching is case-insensitive by design.
+  var purchaseItemActiveIndex = -1;
+  function renderPurchaseItemDropdown(matches){
+    var box = document.getElementById("purchaseItemDropdown");
+    if(matches.length === 0){
+      box.innerHTML = "<div class='combo-empty'>No matching items.</div>";
+      box.style.display = "block";
+      return;
+    }
+    box.innerHTML = matches.map(function(it, i){
+      return "<div class='combo-option" + (i === purchaseItemActiveIndex ? " active" : "") + "' data-id='" + it.id + "' data-index='" + i + "'>" +
+        escapeHtml(it.name) + (it.category ? " <span class='hint'>(" + escapeHtml(it.category) + ")</span>" : "") +
+      "</div>";
+    }).join("");
+    box.style.display = "block";
+  }
+  function filterPurchaseItems(q){
+    var needle = q.trim().toLowerCase();
+    if(!needle) return state.items.slice(0, 50);
+    return state.items.filter(function(it){
+      var hay = (it.name + " " + (it.barcode||"") + " " + (it.category||"")).toLowerCase();
+      return hay.indexOf(needle) !== -1;
+    }).slice(0, 50);
+  }
+  function selectPurchaseItem(id){
+    var it = state.items.find(function(x){ return x.id === id; });
+    if(!it) return;
+    document.getElementById("purchaseItem").value = it.id;
+    document.getElementById("purchaseItemSearch").value = it.name;
+    document.getElementById("purchaseItemDropdown").style.display = "none";
+    purchaseItemActiveIndex = -1;
+  }
+  var purchaseItemSearchEl = document.getElementById("purchaseItemSearch");
+  purchaseItemSearchEl.addEventListener("input", function(){
+    document.getElementById("purchaseItem").value = "";
+    purchaseItemActiveIndex = -1;
+    renderPurchaseItemDropdown(filterPurchaseItems(this.value));
+  });
+  purchaseItemSearchEl.addEventListener("focus", function(){
+    renderPurchaseItemDropdown(filterPurchaseItems(this.value));
+  });
+  purchaseItemSearchEl.addEventListener("keydown", function(e){
+    var box = document.getElementById("purchaseItemDropdown");
+    if(box.style.display === "none") return;
+    var options = box.querySelectorAll(".combo-option");
+    if(e.key === "ArrowDown"){
+      e.preventDefault();
+      purchaseItemActiveIndex = Math.min(purchaseItemActiveIndex + 1, options.length - 1);
+      renderPurchaseItemDropdown(filterPurchaseItems(this.value));
+    } else if(e.key === "ArrowUp"){
+      e.preventDefault();
+      purchaseItemActiveIndex = Math.max(purchaseItemActiveIndex - 1, 0);
+      renderPurchaseItemDropdown(filterPurchaseItems(this.value));
+    } else if(e.key === "Enter"){
+      e.preventDefault();
+      var matches = filterPurchaseItems(this.value);
+      var pick = matches[purchaseItemActiveIndex] || matches[0];
+      if(pick) selectPurchaseItem(pick.id);
+    } else if(e.key === "Escape"){
+      box.style.display = "none";
+    }
+  });
+  document.getElementById("purchaseItemDropdown").addEventListener("mousedown", function(e){
+    var opt = e.target.closest(".combo-option");
+    if(opt) selectPurchaseItem(opt.dataset.id);
+  });
+  document.addEventListener("click", function(e){
+    if(!e.target.closest("#purchaseItemSearch") && !e.target.closest("#purchaseItemDropdown")){
+      document.getElementById("purchaseItemDropdown").style.display = "none";
+    }
+  });
 
   var pendingProofDataUrl = null;
   var pendingProofName = null;
@@ -2155,6 +2277,98 @@
     purchasePageNumber--;
     renderPurchaseTable();
   });
+
+  // ================= ITEM DATABASE (premade catalog, not live inventory) =================
+  var CATALOG_PAGE_SIZE = 50;
+  var catalogPageNumber = 1;
+
+  function populateCatalogCatFilter(){
+    var sel = document.getElementById("catalogCatFilter");
+    var current = sel.value;
+    var cats = Array.from(new Set(state.itemCatalog.map(function(it){ return it.category || "Uncategorized"; }))).sort();
+    sel.innerHTML = "<option value='all'>All categories</option>" +
+      cats.map(function(c){ return "<option value='" + escapeHtml(c) + "'>" + escapeHtml(c) + "</option>"; }).join("");
+    if(cats.indexOf(current) !== -1) sel.value = current;
+  }
+
+  function renderItemCatalog(){
+    populateCatalogCatFilter();
+    var q = document.getElementById("catalogSearch").value.trim().toLowerCase();
+    var catFilter = document.getElementById("catalogCatFilter").value;
+    var inventoryBarcodes = {};
+    state.items.forEach(function(it){ if(it.barcode) inventoryBarcodes[it.barcode] = true; });
+
+    var list = state.itemCatalog.filter(function(it){
+      if(q){
+        // Case-insensitive: everything is already lowercased via .toLowerCase() on both sides.
+        var hay = (it.name + " " + (it.barcode||"") + " " + (it.category||"")).toLowerCase();
+        if(hay.indexOf(q) === -1) return false;
+      }
+      if(catFilter !== "all" && (it.category || "Uncategorized") !== catFilter) return false;
+      return true;
+    });
+
+    document.getElementById("catalogCount").textContent = state.itemCatalog.length;
+    var empty = document.getElementById("catalogEmpty");
+    empty.style.display = list.length === 0 ? "block" : "none";
+
+    var totalPages = Math.max(1, Math.ceil(list.length / CATALOG_PAGE_SIZE));
+    if(catalogPageNumber > totalPages) catalogPageNumber = totalPages;
+    if(catalogPageNumber < 1) catalogPageNumber = 1;
+    var pageItems = list.slice((catalogPageNumber-1)*CATALOG_PAGE_SIZE, catalogPageNumber*CATALOG_PAGE_SIZE);
+
+    document.getElementById("catalogPageLabel").textContent = "Page " + catalogPageNumber + " of " + totalPages;
+    document.getElementById("catalogPrevPageBtn").disabled = catalogPageNumber <= 1;
+    document.getElementById("catalogNextPageBtn").disabled = catalogPageNumber >= totalPages;
+
+    document.getElementById("catalogBody").innerHTML = pageItems.map(function(it){
+      var inInventory = it.barcode && inventoryBarcodes[it.barcode];
+      var actionHtml = inInventory
+        ? "<span class='hint'>✓ In Inventory</span>"
+        : "<button class='btn small' onclick=\"POS.addCatalogItemToInventory('" + it.id + "')\">Add to Inventory</button>";
+      return "<tr>" +
+        "<td>" + escapeHtml(it.name) + "</td>" +
+        "<td>" + escapeHtml(it.barcode||"—") + "</td>" +
+        "<td>" + escapeHtml(it.category||"—") + "</td>" +
+        "<td>" + money(it.price) + "</td>" +
+        "<td>" + actionHtml + "</td>" +
+      "</tr>";
+    }).join("");
+  }
+  document.getElementById("catalogSearch").addEventListener("input", function(){ catalogPageNumber = 1; renderItemCatalog(); });
+  document.getElementById("catalogCatFilter").addEventListener("change", function(){ catalogPageNumber = 1; renderItemCatalog(); });
+  document.getElementById("catalogNextPageBtn").addEventListener("click", function(){ catalogPageNumber++; renderItemCatalog(); });
+  document.getElementById("catalogPrevPageBtn").addEventListener("click", function(){ catalogPageNumber--; renderItemCatalog(); });
+
+  // Copies a catalog entry into the live items table (stock starts at 0 —
+  // the owner records an actual Purchase afterward to bring stock in).
+  // Guards against duplicates by barcode, since the catalog item itself
+  // stays in place either way (it's a reusable reference, not consumed).
+  function addCatalogItemToInventory(catalogId){
+    var catItem = state.itemCatalog.find(function(it){ return it.id === catalogId; });
+    if(!catItem) return;
+    if(catItem.barcode && state.items.some(function(it){ return it.barcode === catItem.barcode; })){
+      toast("Already in inventory.");
+      return;
+    }
+    if(catItem.category && state.categories.indexOf(catItem.category) === -1){
+      state.categories.push(catItem.category);
+      saveCats();
+    }
+    state.items.push({
+      id: uid(),
+      name: catItem.name,
+      barcode: catItem.barcode || "",
+      category: catItem.category || "",
+      price: catItem.price || 0,
+      stock: 0,
+      unit: catItem.unit || "pcs",
+      lowStock: catItem.lowStock || 5
+    });
+    saveItems();
+    renderItemCatalog();
+    toast("Added \"" + catItem.name + "\" to Inventory — record a Purchase to bring in stock.");
+  }
 
   function renderPurchasesView(){
     renderSupplierUI();
@@ -3892,6 +4106,7 @@
   window.POS = {
     editItem: editItem,
     deleteItem: deleteItem,
+    addCatalogItemToInventory: addCatalogItemToInventory,
     addToCart: addToCart,
     changeQty: changeQty,
     setQty: setQty,

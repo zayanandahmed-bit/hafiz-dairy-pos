@@ -37,6 +37,20 @@ create table if not exists items (
   low_stock numeric default 0
 );
 
+-- A master reference catalog — items here are NOT live inventory (no stock
+-- tracking, don't show up in Billing/Purchases) until explicitly copied into
+-- the `items` table via "Add to Inventory". Lets a store owner import a huge
+-- premade product list without it looking like they stock everything in it.
+create table if not exists item_catalog (
+  id text primary key,
+  name text not null,
+  barcode text default '',
+  category text default '',
+  price numeric default 0,
+  unit text default '',
+  low_stock numeric default 0
+);
+
 create table if not exists categories (
   name text primary key
 );
@@ -191,6 +205,7 @@ on conflict (key) do nothing;
 -- not even with the anon key. Only the SECURITY DEFINER functions below can.
 
 alter table items enable row level security;
+alter table item_catalog enable row level security;
 alter table categories enable row level security;
 alter table suppliers enable row level security;
 alter table cashiers enable row level security;
@@ -294,6 +309,14 @@ begin
            coalesce((x->>'price')::numeric,0), coalesce((x->>'stock')::numeric,0),
            coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0)
     from jsonb_array_elements(payload->'items') x;
+  end if;
+
+  if payload ? 'itemCatalog' then
+    delete from item_catalog where true;
+    insert into item_catalog (id, name, barcode, category, price, unit, low_stock)
+    select x->>'id', x->>'name', coalesce(x->>'barcode',''), coalesce(x->>'category',''),
+           coalesce((x->>'price')::numeric,0), coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0)
+    from jsonb_array_elements(payload->'itemCatalog') x;
   end if;
 
   if payload ? 'categories' then
@@ -434,6 +457,11 @@ begin
       'id', id, 'name', name, 'barcode', barcode, 'category', category,
       'price', price, 'stock', stock, 'unit', unit, 'lowStock', low_stock
     )) from items), '[]'::jsonb),
+
+    'itemCatalog', coalesce((select jsonb_agg(jsonb_build_object(
+      'id', id, 'name', name, 'barcode', barcode, 'category', category,
+      'price', price, 'unit', unit, 'lowStock', low_stock
+    )) from item_catalog), '[]'::jsonb),
 
     'categories', coalesce((select jsonb_agg(name) from categories), '[]'::jsonb),
 
@@ -755,6 +783,21 @@ begin
 end;
 $$;
 
+create or replace function sync_replace_item_catalog("itemCatalog" jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from item_catalog where true;
+  insert into item_catalog (id, name, barcode, category, price, unit, low_stock)
+  select x->>'id', x->>'name', coalesce(x->>'barcode',''), coalesce(x->>'category',''),
+         coalesce((x->>'price')::numeric,0), coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0)
+  from jsonb_array_elements("itemCatalog") x;
+end;
+$$;
+
 create or replace function sync_replace_categories(categories jsonb)
 returns void
 language plpgsql
@@ -899,6 +942,7 @@ grant execute on function sync_append_sales_batch(jsonb) to anon;
 grant execute on function sync_append_refund(jsonb) to anon;
 grant execute on function sync_clear_sales() to anon;
 grant execute on function sync_replace_items(jsonb) to anon;
+grant execute on function sync_replace_item_catalog(jsonb) to anon;
 grant execute on function sync_replace_categories(jsonb) to anon;
 grant execute on function sync_replace_suppliers(jsonb) to anon;
 grant execute on function sync_replace_cashiers(jsonb) to anon;
