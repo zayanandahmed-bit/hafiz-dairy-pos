@@ -643,10 +643,7 @@
         <h2>Expenses (this range)</h2>
         <span id="expenseSummary" style="font-size:13px;color:var(--muted);"></span>
       </div>
-      <table>
-        <thead><tr><th>Month</th><th>Date Paid</th><th>Category</th><th>Amount</th><th>Notes</th><th></th></tr></thead>
-        <tbody id="expenseBody"></tbody>
-      </table>
+      <div id="expenseGroups"></div>
       <div id="expenseEmpty" class="empty" style="display:none;">No expenses logged in this range.</div>
     </div>
   </div>
@@ -3563,21 +3560,54 @@
     document.getElementById("finPurchasesOut").textContent = money(purchasesTotal);
     document.getElementById("finExpensesOut").textContent = money(expensesTotal);
 
-    var body = document.getElementById("expenseBody");
+    var groupsEl = document.getElementById("expenseGroups");
     var empty = document.getElementById("expenseEmpty");
     empty.style.display = expensesInRange.length === 0 ? "block" : "none";
     document.getElementById("expenseSummary").textContent = expensesInRange.length + " expense(s) · Total: " + money(expensesTotal);
-    body.innerHTML = expensesInRange.map(function(e){
-      return "<tr>" +
-        "<td>" + (e.period||"—") + "</td>" +
-        "<td>" + (e.date||"—") + "</td>" +
-        "<td>" + escapeHtml(e.category||"—") + "</td>" +
-        "<td>" + money(e.amount) + "</td>" +
-        "<td>" + escapeHtml(e.notes||"") + "</td>" +
-        '<td><button class="btn secondary small" onclick="POS.showExpenseReceipt(\'' + e.id + '\')">Receipt</button> ' +
-        '<button class="btn danger small" onclick="POS.deleteExpense(\'' + e.id + '\')">Delete</button></td>' +
-      "</tr>";
+
+    var groups = {};
+    var order = [];
+    expensesInRange.forEach(function(e){
+      var key = e.period || "—";
+      if(!groups[key]){ groups[key] = []; order.push(key); }
+      groups[key].push(e);
+    });
+    order.sort(function(a,b){ return b.localeCompare(a); });
+
+    groupsEl.innerHTML = order.map(function(key){
+      var rows = groups[key];
+      var monthTotal = rows.reduce(function(s,e){ return s + (e.amount||0); }, 0);
+      var rowsHtml = rows.map(function(e){
+        return "<tr>" +
+          "<td>" + (e.date||"—") + "</td>" +
+          "<td>" + escapeHtml(e.category||"—") + "</td>" +
+          "<td>" + money(e.amount) + "</td>" +
+          "<td>" + escapeHtml(e.notes||"") + "</td>" +
+          '<td><button class="btn secondary small" onclick="POS.showExpenseReceipt(\'' + e.id + '\')">Receipt</button> ' +
+          '<button class="btn danger small" onclick="POS.deleteExpense(\'' + e.id + '\')">Delete</button></td>' +
+        "</tr>";
+      }).join("");
+      return '<div class="panel" style="margin-bottom:14px;border:1px solid var(--border);">' +
+        '<div class="flex-between" style="margin-bottom:8px;">' +
+          '<h3 style="margin:0;">' + formatPeriodLabel(key) + '</h3>' +
+          '<span style="font-size:13px;color:var(--muted);">' + rows.length + ' expense(s) · Total: ' + money(monthTotal) + '</span>' +
+        '</div>' +
+        '<table>' +
+          '<thead><tr><th>Date Paid</th><th>Category</th><th>Amount</th><th>Notes</th><th></th></tr></thead>' +
+          '<tbody>' + rowsHtml + '</tbody>' +
+        '</table>' +
+      '</div>';
     }).join("");
+  }
+
+  function formatPeriodLabel(period){
+    if(!period || period === "—") return "—";
+    var parts = period.split("-");
+    if(parts.length !== 2) return period;
+    var months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    var idx = parseInt(parts[1], 10) - 1;
+    if(idx < 0 || idx > 11) return period;
+    return months[idx] + " " + parts[0];
   }
 
   // Reuses the same receipt-paper modal/print flow as sale receipts —
