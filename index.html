@@ -387,6 +387,10 @@
         </div>
         <div class="grid grid-4" style="margin-top:10px;">
           <div>
+            <label>Buying Price (per unit) *</label>
+            <input type="number" id="itemCost" step="0.01" min="0" required title="What you pay to bring one unit in — used by the Financials tab's Money Out.">
+          </div>
+          <div>
             <label>Price *</label>
             <input type="number" id="itemPrice" step="0.01" min="0" required>
           </div>
@@ -398,6 +402,8 @@
             <label>Unit</label>
             <input id="itemUnit" placeholder="pcs / kg / ltr" value="pcs">
           </div>
+        </div>
+        <div class="grid grid-4" style="margin-top:10px;">
           <div>
             <label>Low Stock Alert Below</label>
             <input type="number" id="itemLowStock" step="1" min="0" value="5">
@@ -857,7 +863,7 @@
       <datalist id="scanCatList"></datalist>
       <div style="overflow-x:auto;">
         <table class="cart-table" id="scanSheetTable">
-          <thead><tr><th></th><th>Item Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Unit</th></tr></thead>
+          <thead><tr><th></th><th>Item Name</th><th>Category</th><th>Buying Price</th><th>Price</th><th>Stock</th><th>Unit</th></tr></thead>
           <tbody id="scanSheetTbody"></tbody>
         </table>
       </div>
@@ -1689,18 +1695,53 @@
   var invCancelBtn = document.getElementById("invCancelBtn");
   var groupByCategory = true;
 
+  // Stock added straight through this form (not via the Purchases tab)
+  // still needs to count as Money Out on the Financials tab, or profit
+  // there would look inflated. Whenever this form results in MORE stock
+  // than before, it auto-logs a Purchase record for that delta at the
+  // Buying Price entered — same ledger Financials already reads from.
+  var DIRECT_ENTRY_SUPPLIER_NAME = "Direct Stock Entry (via Inventory)";
+  function getOrCreateDirectEntrySupplier(){
+    var existing = state.suppliers.find(function(s){ return s.name === DIRECT_ENTRY_SUPPLIER_NAME; });
+    if(existing) return existing;
+    var created = { id: uid(), name: DIRECT_ENTRY_SUPPLIER_NAME, contact: "", address: "Auto-created — stock added directly via the Inventory tab" };
+    state.suppliers.push(created);
+    saveSuppliers();
+    return created;
+  }
+  function logDirectStockPurchase(item, qtyDelta, costPerUnit){
+    if(qtyDelta <= 0) return;
+    var supplier = getOrCreateDirectEntrySupplier();
+    state.purchases.push({
+      id: uid(),
+      date: new Date().toISOString().slice(0,10),
+      supplierId: supplier.id,
+      supplierName: supplier.name,
+      itemId: item.id,
+      itemName: item.name,
+      qty: qtyDelta,
+      cost: costPerUnit,
+      total: qtyDelta * costPerUnit,
+      proof: null,
+      proofName: null,
+      notes: "Stock added via Inventory tab"
+    });
+    savePurchases();
+  }
+
   invForm.addEventListener("submit", function(e){
     e.preventDefault();
     var id = document.getElementById("itemId").value;
     var name = document.getElementById("itemName").value.trim();
     var barcode = document.getElementById("itemBarcode").value.trim();
     var category = document.getElementById("itemCategory").value;
+    var cost = parseFloat(document.getElementById("itemCost").value);
     var price = parseFloat(document.getElementById("itemPrice").value);
     var stock = parseInt(document.getElementById("itemStock").value, 10);
     var unit = document.getElementById("itemUnit").value.trim() || "pcs";
     var lowStock = parseInt(document.getElementById("itemLowStock").value, 10) || 0;
 
-    if(!name || isNaN(price) || isNaN(stock) || !category){
+    if(!name || isNaN(cost) || isNaN(price) || isNaN(stock) || !category){
       toast("Please fill in required fields.");
       return;
     }
@@ -1715,20 +1756,25 @@
     if(id){
       var item = state.items.find(function(it){ return it.id === id; });
       if(item){
+        var previousStock = item.stock || 0;
         item.name = name; item.barcode = barcode; item.category = category;
-        item.price = price; item.stock = stock; item.unit = unit; item.lowStock = lowStock;
+        item.price = price; item.cost = cost; item.stock = stock; item.unit = unit; item.lowStock = lowStock;
+        if(stock > previousStock) logDirectStockPurchase(item, stock - previousStock, cost);
       }
       toast("Item updated.");
     } else {
-      state.items.push({
+      var newItem = {
         id: uid(), name: name, barcode: barcode, category: category,
-        price: price, stock: stock, unit: unit, lowStock: lowStock
-      });
+        price: price, cost: cost, stock: stock, unit: unit, lowStock: lowStock
+      };
+      state.items.push(newItem);
+      if(stock > 0) logDirectStockPurchase(newItem, stock, cost);
       toast("Item added.");
     }
     saveItems();
     resetInvForm();
     renderInventory();
+    renderFinancials();
   });
 
   invCancelBtn.addEventListener("click", resetInvForm);
@@ -1786,6 +1832,7 @@
         '<td><input type="checkbox" class="scanRowInclude" checked></td>' +
         '<td><input class="scanRowName" value="'+escapeHtml(row.name)+'" style="min-width:140px;"></td>' +
         '<td><input class="scanRowCategory" list="scanCatList" value="'+escapeHtml(state.categories[0] || "Uncategorized")+'" style="width:110px;"></td>' +
+        '<td><input type="number" step="0.01" min="0" class="scanRowCost" value="0" style="width:80px;" title="What you paid per unit — leave 0 if unknown, edit later."></td>' +
         '<td><input type="number" step="0.01" min="0" class="scanRowPrice" value="'+row.price+'" style="width:80px;"></td>' +
         '<td><input type="number" step="1" min="0" class="scanRowStock" value="'+row.stock+'" style="width:70px;"></td>' +
         '<td><input class="scanRowUnit" value="'+row.unit+'" style="width:60px;"></td>' +
@@ -1856,19 +1903,23 @@
       var name = tr.querySelector(".scanRowName").value.trim();
       if(!name) return;
       var category = tr.querySelector(".scanRowCategory").value.trim() || "Uncategorized";
+      var cost = parseFloat(tr.querySelector(".scanRowCost").value) || 0;
       var price = parseFloat(tr.querySelector(".scanRowPrice").value) || 0;
       var stock = parseInt(tr.querySelector(".scanRowStock").value, 10) || 0;
       var unit = tr.querySelector(".scanRowUnit").value.trim() || "pcs";
       if(state.categories.indexOf(category) === -1) state.categories.push(category);
-      state.items.push({
+      var scannedItem = {
         id: uid(), name: name, barcode: "", category: category,
-        price: price, stock: stock, unit: unit, lowStock: state.settings.defaultLowStock || 5
-      });
+        price: price, cost: cost, stock: stock, unit: unit, lowStock: state.settings.defaultLowStock || 5
+      };
+      state.items.push(scannedItem);
+      if(stock > 0 && cost > 0) logDirectStockPurchase(scannedItem, stock, cost);
       added++;
     });
     if(added === 0){ toast("No items were selected to add."); return; }
     saveCats();
     saveItems();
+    renderFinancials();
     renderInventory();
     renderCategoryUI();
     populatePurchaseItemSelect();
@@ -1883,6 +1934,7 @@
     document.getElementById("itemName").value = item.name;
     document.getElementById("itemBarcode").value = item.barcode || "";
     document.getElementById("itemCategory").value = item.category || "Uncategorized";
+    document.getElementById("itemCost").value = item.cost || 0;
     document.getElementById("itemPrice").value = item.price;
     document.getElementById("itemStock").value = item.stock;
     document.getElementById("itemUnit").value = item.unit || "pcs";
@@ -2486,6 +2538,7 @@
       barcode: catItem.barcode || "",
       category: catItem.category || "",
       price: catItem.price || 0,
+      cost: catItem.cost || 0,
       stock: 0,
       unit: catItem.unit || "pcs",
       lowStock: catItem.lowStock || 5

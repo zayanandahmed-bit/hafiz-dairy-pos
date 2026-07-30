@@ -32,10 +32,14 @@ create table if not exists items (
   barcode text default '',
   category text default '',
   price numeric default 0,
+  cost numeric default 0, -- buying price per unit, so Financials' Money Out is accurate
   stock numeric default 0,
   unit text default '',
   low_stock numeric default 0
 );
+
+-- Safe to re-run — no-op if the column already exists.
+alter table items add column if not exists cost numeric default 0;
 
 -- A master reference catalog — items here are NOT live inventory (no stock
 -- tracking, don't show up in Billing/Purchases) until explicitly copied into
@@ -48,12 +52,14 @@ create table if not exists item_catalog (
   category text default '',
   brand text default '',
   price numeric default 0,
+  cost numeric default 0, -- suggested buying price, pre-fills Inventory's Buying Price on Add to Inventory
   unit text default '',
   low_stock numeric default 0
 );
 
 -- Safe to re-run — no-op if the column already exists.
 alter table item_catalog add column if not exists brand text default '';
+alter table item_catalog add column if not exists cost numeric default 0;
 
 create table if not exists categories (
   name text primary key
@@ -320,18 +326,18 @@ as $$
 begin
   if payload ? 'items' then
     delete from items where true;
-    insert into items (id, name, barcode, category, price, stock, unit, low_stock)
+    insert into items (id, name, barcode, category, price, cost, stock, unit, low_stock)
     select x->>'id', x->>'name', coalesce(x->>'barcode',''), coalesce(x->>'category',''),
-           coalesce((x->>'price')::numeric,0), coalesce((x->>'stock')::numeric,0),
+           coalesce((x->>'price')::numeric,0), coalesce((x->>'cost')::numeric,0), coalesce((x->>'stock')::numeric,0),
            coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0)
     from jsonb_array_elements(payload->'items') x;
   end if;
 
   if payload ? 'itemCatalog' then
     delete from item_catalog where true;
-    insert into item_catalog (id, name, barcode, category, brand, price, unit, low_stock)
+    insert into item_catalog (id, name, barcode, category, brand, price, cost, unit, low_stock)
     select x->>'id', x->>'name', coalesce(x->>'barcode',''), coalesce(x->>'category',''), coalesce(x->>'brand',''),
-           coalesce((x->>'price')::numeric,0), coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0)
+           coalesce((x->>'price')::numeric,0), coalesce((x->>'cost')::numeric,0), coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0)
     from jsonb_array_elements(payload->'itemCatalog') x;
   end if;
 
@@ -479,12 +485,12 @@ begin
   select jsonb_build_object(
     'items', coalesce((select jsonb_agg(jsonb_build_object(
       'id', id, 'name', name, 'barcode', barcode, 'category', category,
-      'price', price, 'stock', stock, 'unit', unit, 'lowStock', low_stock
+      'price', price, 'cost', cost, 'stock', stock, 'unit', unit, 'lowStock', low_stock
     )) from items), '[]'::jsonb),
 
     'itemCatalog', coalesce((select jsonb_agg(jsonb_build_object(
       'id', id, 'name', name, 'barcode', barcode, 'category', category, 'brand', brand,
-      'price', price, 'unit', unit, 'lowStock', low_stock
+      'price', price, 'cost', cost, 'unit', unit, 'lowStock', low_stock
     )) from item_catalog), '[]'::jsonb),
 
     'categories', coalesce((select jsonb_agg(name) from categories), '[]'::jsonb),
@@ -803,9 +809,9 @@ set search_path = public
 as $$
 begin
   delete from items where true;
-  insert into items (id, name, barcode, category, price, stock, unit, low_stock)
+  insert into items (id, name, barcode, category, price, cost, stock, unit, low_stock)
   select x->>'id', x->>'name', coalesce(x->>'barcode',''), coalesce(x->>'category',''),
-         coalesce((x->>'price')::numeric,0), coalesce((x->>'stock')::numeric,0),
+         coalesce((x->>'price')::numeric,0), coalesce((x->>'cost')::numeric,0), coalesce((x->>'stock')::numeric,0),
          coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0)
   from jsonb_array_elements(items) x;
 end;
@@ -819,9 +825,9 @@ set search_path = public
 as $$
 begin
   delete from item_catalog where true;
-  insert into item_catalog (id, name, barcode, category, brand, price, unit, low_stock)
+  insert into item_catalog (id, name, barcode, category, brand, price, cost, unit, low_stock)
   select x->>'id', x->>'name', coalesce(x->>'barcode',''), coalesce(x->>'category',''), coalesce(x->>'brand',''),
-         coalesce((x->>'price')::numeric,0), coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0)
+         coalesce((x->>'price')::numeric,0), coalesce((x->>'cost')::numeric,0), coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0)
   from jsonb_array_elements("itemCatalog") x;
 end;
 $$;
