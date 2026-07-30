@@ -169,19 +169,25 @@
 
 <div id="sidebarBackdrop"></div>
 <aside id="sidebar">
-  <div class="brand">🛒 <div><span id="sbStoreName">Hafiz Dairy</span><span class="brand-sub">Point of Sale</span></div></div>
+  <div class="brand">🛒 <div><span id="sbStoreName">Hafiz Dairy</span><span class="brand-sub" data-i18n="posSubtitle">Point of Sale</span></div></div>
   <nav>
-    <button class="nav-btn" data-view="dashboard"><span class="nav-icon">📊</span> Dashboard</button>
-    <button class="nav-btn active" data-view="billing"><span class="nav-icon">🧾</span> Billing</button>
-    <button class="nav-btn" data-view="inventory"><span class="nav-icon">📦</span> Inventory</button>
-    <button class="nav-btn" data-view="itemCatalog"><span class="nav-icon">🗂️</span> Item Database</button>
-    <button class="nav-btn" data-view="purchases"><span class="nav-icon">🚚</span> Purchases</button>
-    <button class="nav-btn" data-view="customers"><span class="nav-icon">🤝</span> Customers (Udhaar)</button>
-    <button class="nav-btn" data-view="sales"><span class="nav-icon">📈</span> Sales History</button>
-    <button class="nav-btn" data-view="financials"><span class="nav-icon">💰</span> Financials</button>
-    <button class="nav-btn" data-view="settings"><span class="nav-icon">⚙️</span> Settings</button>
+    <button class="nav-btn" data-view="dashboard"><span class="nav-icon">📊</span> <span data-i18n="navDashboard">Dashboard</span></button>
+    <button class="nav-btn active" data-view="billing"><span class="nav-icon">🧾</span> <span data-i18n="navBilling">Billing</span></button>
+    <button class="nav-btn" data-view="inventory"><span class="nav-icon">📦</span> <span data-i18n="navInventory">Inventory</span></button>
+    <button class="nav-btn" data-view="itemCatalog"><span class="nav-icon">🗂️</span> <span data-i18n="navItemDatabase">Item Database</span></button>
+    <button class="nav-btn" data-view="purchases"><span class="nav-icon">🚚</span> <span data-i18n="navPurchases">Purchases</span></button>
+    <button class="nav-btn" data-view="customers"><span class="nav-icon">🤝</span> <span data-i18n="navCustomers">Customers (Udhaar)</span></button>
+    <button class="nav-btn" data-view="sales"><span class="nav-icon">📈</span> <span data-i18n="navSales">Sales History</span></button>
+    <button class="nav-btn" data-view="financials"><span class="nav-icon">💰</span> <span data-i18n="navFinancials">Financials</span></button>
+    <button class="nav-btn" data-view="settings"><span class="nav-icon">⚙️</span> <span data-i18n="navSettings">Settings</span></button>
   </nav>
-  <div class="sidebar-foot">All data stored locally in this browser.</div>
+  <div class="sidebar-foot">
+    <div class="switch-row" style="justify-content:flex-start;gap:8px;margin-bottom:8px;">
+      <label class="switch"><input type="checkbox" id="langToggle"><span class="slider"></span></label>
+      <span data-i18n="urduToggle">اردو / Urdu</span>
+    </div>
+    <div data-i18n="localDataNote">All data stored locally in this browser.</div>
+  </div>
 </aside>
 
 <div id="appMain">
@@ -207,90 +213,90 @@
     <div class="panel">
       <div class="flex-between">
         <div class="row" style="margin-bottom:0;">
-          <button class="btn secondary small dash-date-tab" data-range="today">Today</button>
-          <button class="btn secondary small dash-date-tab active" data-range="week">This Week</button>
-          <button class="btn secondary small dash-date-tab" data-range="month">This Month</button>
-          <button class="btn secondary small dash-date-tab" data-range="all">All Time</button>
-          <button class="btn secondary small dash-date-tab" data-range="custom">Custom Range</button>
+          <button class="btn secondary small dash-date-tab" data-range="today" data-i18n="today">Today</button>
+          <button class="btn secondary small dash-date-tab active" data-range="week" data-i18n="thisWeek">This Week</button>
+          <button class="btn secondary small dash-date-tab" data-range="month" data-i18n="thisMonth">This Month</button>
+          <button class="btn secondary small dash-date-tab" data-range="all" data-i18n="allTime">All Time</button>
+          <button class="btn secondary small dash-date-tab" data-range="custom" data-i18n="customRange">Custom Range</button>
         </div>
-        <button class="btn small" id="emailReportBtn">📄 Download Daily Report (PDF)</button>
+        <button class="btn small" id="emailReportBtn" data-i18n="downloadDailyReport">📄 Download Daily Report (PDF)</button>
       </div>
       <div class="row" id="dashCustomRangeBox" style="display:none;margin-top:10px;">
-        <div><label>From</label><input type="date" id="dashCustomFrom"></div>
-        <div><label>To</label><input type="date" id="dashCustomTo"></div>
-        <button class="btn small" id="dashApplyCustomRangeBtn">Apply</button>
+        <div><label data-i18n="from">From</label><input type="date" id="dashCustomFrom"></div>
+        <div><label data-i18n="to">To</label><input type="date" id="dashCustomTo"></div>
+        <button class="btn small" id="dashApplyCustomRangeBtn" data-i18n="apply">Apply</button>
       </div>
     </div>
 
     <div class="stat-grid">
-      <div class="stat-card accent"><div class="label">Revenue <span id="dashRangeLabel1"></span></div><div class="value" id="statTodayRevenue">-</div></div>
-      <div class="stat-card ok"><div class="label">Sales <span id="dashRangeLabel2"></span></div><div class="value" id="statTodaySales">-</div></div>
-      <div class="stat-card warn"><div class="label">Low Stock Items</div><div class="value" id="statLowStock">-</div></div>
-      <div class="stat-card danger"><div class="label">Out of Stock</div><div class="value" id="statOutStock">-</div></div>
+      <div class="stat-card accent"><div class="label" data-i18n="revenue">Revenue <span id="dashRangeLabel1"></span></div><div class="value" id="statTodayRevenue">-</div></div>
+      <div class="stat-card ok"><div class="label" data-i18n="sales">Sales <span id="dashRangeLabel2"></span></div><div class="value" id="statTodaySales">-</div></div>
+      <div class="stat-card warn"><div class="label" data-i18n="lowStockItems">Low Stock Items</div><div class="value" id="statLowStock">-</div></div>
+      <div class="stat-card danger"><div class="label" data-i18n="outOfStock">Out of Stock</div><div class="value" id="statOutStock">-</div></div>
     </div>
 
     <div class="panel" style="margin-top:16px;">
-      <h2>Inventory Overview</h2>
+      <h2 data-i18n="inventoryOverview">Inventory Overview</h2>
       <div class="grid grid-3">
-        <div><div class="label">Total Items</div><div style="font-size:18px;font-weight:bold;" id="statTotalItems">-</div></div>
-        <div><div class="label">Total Categories</div><div style="font-size:18px;font-weight:bold;" id="statTotalCats">-</div></div>
-        <div><div class="label">Items Without Barcode</div><div style="font-size:18px;font-weight:bold;" id="statNoBarcode">-</div></div>
+        <div><div class="label" data-i18n="totalItems">Total Items</div><div style="font-size:18px;font-weight:bold;" id="statTotalItems">-</div></div>
+        <div><div class="label" data-i18n="totalCategories">Total Categories</div><div style="font-size:18px;font-weight:bold;" id="statTotalCats">-</div></div>
+        <div><div class="label" data-i18n="itemsWithoutBarcode">Items Without Barcode</div><div style="font-size:18px;font-weight:bold;" id="statNoBarcode">-</div></div>
       </div>
     </div>
 
     <div class="panel">
       <div class="flex-between">
-        <h2>Near Expiry / Expired</h2>
-        <span class="hint">Items expiring within 14 days, soonest first.</span>
+        <h2 data-i18n="nearExpiry">Near Expiry / Expired</h2>
+        <span class="hint" data-i18n="nearExpiryHint">Items expiring within 14 days, soonest first.</span>
       </div>
       <table>
-        <thead><tr><th>Item</th><th>Stock</th><th>Expiry Date</th><th>Status</th></tr></thead>
+        <thead><tr><th data-i18n="item">Item</th><th data-i18n="stock">Stock</th><th data-i18n="expiryDate">Expiry Date</th><th data-i18n="status">Status</th></tr></thead>
         <tbody id="nearExpiryBody"></tbody>
       </table>
-      <div id="nearExpiryEmpty" class="empty" style="display:none;">Nothing expiring soon.</div>
+      <div id="nearExpiryEmpty" class="empty" style="display:none;" data-i18n="nothingExpiring">Nothing expiring soon.</div>
     </div>
 
     <div class="panel">
       <div class="flex-between">
-        <h2>Reorder List</h2>
-        <span class="hint">Items at or below their low-stock threshold.</span>
+        <h2 data-i18n="reorderList">Reorder List</h2>
+        <span class="hint" data-i18n="reorderHint">Items at or below their low-stock threshold.</span>
       </div>
       <table>
-        <thead><tr><th>Item</th><th>Current Stock</th><th>Low Stock Threshold</th><th>Status</th></tr></thead>
+        <thead><tr><th data-i18n="item">Item</th><th data-i18n="currentStock">Current Stock</th><th data-i18n="lowStockThreshold">Low Stock Threshold</th><th data-i18n="status">Status</th></tr></thead>
         <tbody id="reorderBody"></tbody>
       </table>
-      <div id="reorderEmpty" class="empty" style="display:none;">Nothing needs restocking right now.</div>
+      <div id="reorderEmpty" class="empty" style="display:none;" data-i18n="nothingToRestock">Nothing needs restocking right now.</div>
     </div>
 
     <div class="panel">
-      <h2>Top Selling Items <span id="dashRangeLabel3" style="font-weight:normal;color:var(--muted);font-size:13px;"></span></h2>
+      <h2 data-i18n="topSellingItems">Top Selling Items <span id="dashRangeLabel3" style="font-weight:normal;color:var(--muted);font-size:13px;"></span></h2>
       <table>
-        <thead><tr><th>Item</th><th>Qty Sold</th><th>Revenue</th></tr></thead>
+        <thead><tr><th data-i18n="item">Item</th><th data-i18n="qtySold">Qty Sold</th><th data-i18n="revenue2">Revenue</th></tr></thead>
         <tbody id="topItemsBody"></tbody>
       </table>
-      <div id="topItemsEmpty" class="empty" style="display:none;">No sales in this range.</div>
+      <div id="topItemsEmpty" class="empty" style="display:none;" data-i18n="noSalesRange">No sales in this range.</div>
     </div>
 
     <div class="panel">
-      <h2>Recent Sales <span id="dashRangeLabel4" style="font-weight:normal;color:var(--muted);font-size:13px;"></span></h2>
+      <h2 data-i18n="recentSales">Recent Sales <span id="dashRangeLabel4" style="font-weight:normal;color:var(--muted);font-size:13px;"></span></h2>
       <table>
-        <thead><tr><th>Receipt #</th><th>Date/Time</th><th>Customer</th><th>Total</th></tr></thead>
+        <thead><tr><th data-i18n="receiptHash">Receipt #</th><th data-i18n="dateTime">Date/Time</th><th data-i18n="customer">Customer</th><th data-i18n="total">Total</th></tr></thead>
         <tbody id="recentSalesBody"></tbody>
       </table>
-      <div id="recentSalesEmpty" class="empty" style="display:none;">No sales in this range.</div>
+      <div id="recentSalesEmpty" class="empty" style="display:none;" data-i18n="noSalesRange">No sales in this range.</div>
     </div>
 
     <div class="panel">
       <div class="flex-between">
-        <h2>Cashier Activity Log</h2>
+        <h2 data-i18n="cashierActivityLog">Cashier Activity Log</h2>
         <span id="cashierLogSummary" style="font-size:13px;color:var(--muted);"></span>
       </div>
-      <p class="hint">When each cashier logged on (started a shift) and logged off (closed it).</p>
+      <p class="hint" data-i18n="cashierActivityHint">When each cashier logged on (started a shift) and logged off (closed it).</p>
       <table>
-        <thead><tr><th>Cashier</th><th>Logged On</th><th>Logged Off</th><th>Duration</th><th>Cash Diff.</th></tr></thead>
+        <thead><tr><th data-i18n="cashier">Cashier</th><th data-i18n="loggedOn">Logged On</th><th data-i18n="loggedOff">Logged Off</th><th data-i18n="duration">Duration</th><th data-i18n="cashDiff">Cash Diff.</th></tr></thead>
         <tbody id="cashierLogBody"></tbody>
       </table>
-      <div id="cashierLogEmpty" class="empty" style="display:none;">No cashier activity yet.</div>
+      <div id="cashierLogEmpty" class="empty" style="display:none;" data-i18n="noCashierActivity">No cashier activity yet.</div>
     </div>
   </div>
 
@@ -299,73 +305,73 @@
     <div class="pos-layout">
       <div>
         <div class="panel">
-          <h2>Scan or Search Item</h2>
+          <h2 data-i18n="scanOrSearchItem">Scan or Search Item</h2>
           <div class="scan-box">
-            <input id="scanInput" placeholder="Scan barcode, or type item name..." autofocus>
-            <button class="btn" id="scanAddBtn">Add</button>
-            <button class="btn secondary" id="cameraScanBtn" title="Use your phone's camera as a barcode scanner">📷 Scan</button>
+            <input id="scanInput" placeholder="Scan barcode, or type item name..." autofocus data-i18n-placeholder="scanBarcodePlaceholder">
+            <button class="btn" id="scanAddBtn" data-i18n="add">Add</button>
+            <button class="btn secondary" id="cameraScanBtn" title="Use your phone's camera as a barcode scanner" data-i18n="scan">📷 Scan</button>
           </div>
           <div class="search-results" id="searchResults" style="display:none;"></div>
         </div>
 
         <div class="panel">
           <div class="flex-between">
-            <h2>Cart</h2>
+            <h2 data-i18n="cart">Cart</h2>
             <div class="row" style="gap:6px;">
-              <button class="btn secondary small" id="heldSalesBtn">Held Sales (<span id="heldCount">0</span>)</button>
-              <button class="btn secondary small" id="holdSaleBtn">Hold Sale</button>
-              <button class="btn secondary small" id="clearCartBtn">Clear Cart</button>
+              <button class="btn secondary small" id="heldSalesBtn"><span data-i18n="heldSales">Held Sales</span> (<span id="heldCount">0</span>)</button>
+              <button class="btn secondary small" id="holdSaleBtn" data-i18n="holdSale">Hold Sale</button>
+              <button class="btn secondary small" id="clearCartBtn" data-i18n="clearCart">Clear Cart</button>
             </div>
           </div>
           <table class="cart-table">
-            <thead><tr><th>Item</th><th>Price</th><th>Qty</th><th>Subtotal</th><th></th></tr></thead>
+            <thead><tr><th data-i18n="item">Item</th><th data-i18n="price">Price</th><th data-i18n="qty">Qty</th><th data-i18n="subtotal">Subtotal</th><th></th></tr></thead>
             <tbody id="cartBody"></tbody>
           </table>
-          <div id="cartEmpty" class="empty">Cart is empty — scan or search an item to begin</div>
+          <div id="cartEmpty" class="empty" data-i18n="cartEmpty">Cart is empty — scan or search an item to begin</div>
         </div>
       </div>
 
       <div class="panel">
-        <h2>Checkout</h2>
+        <h2 data-i18n="checkout">Checkout</h2>
         <div class="grid grid-2">
           <div>
-            <label>Discount (%)</label>
+            <label data-i18n="discountPct">Discount (%)</label>
             <input type="number" id="discountInput" value="0" min="0" max="100">
           </div>
           <div>
-            <label>Tax (%)</label>
+            <label data-i18n="taxPct">Tax (%)</label>
             <input type="number" id="taxInput" value="0" min="0" max="100">
           </div>
         </div>
         <div class="totals">
-          <div class="line"><span>Subtotal</span><span id="totSubtotal">0.00</span></div>
-          <div class="line"><span>Discount</span><span id="totDiscount">- 0.00</span></div>
-          <div class="line"><span>Tax</span><span id="totTax">+ 0.00</span></div>
-          <div class="line grand"><span>Total</span><span id="totGrand">0.00</span></div>
+          <div class="line"><span data-i18n="subtotal">Subtotal</span><span id="totSubtotal">0.00</span></div>
+          <div class="line"><span data-i18n="discount">Discount</span><span id="totDiscount">- 0.00</span></div>
+          <div class="line"><span data-i18n="tax">Tax</span><span id="totTax">+ 0.00</span></div>
+          <div class="line grand"><span data-i18n="total">Total</span><span id="totGrand">0.00</span></div>
         </div>
         <div style="margin-top:14px;">
-          <label>Customer name (optional)</label>
-          <input id="customerName" placeholder="Walk-in customer">
+          <label data-i18n="customerNameOptional">Customer name (optional)</label>
+          <input id="customerName" placeholder="Walk-in customer" data-i18n-placeholder="walkInCustomer">
         </div>
         <div style="margin-top:14px;">
-          <label>Payment Method</label>
+          <label data-i18n="paymentMethod">Payment Method</label>
           <select id="paymentMethod">
-            <option>Cash</option>
-            <option>Card</option>
-            <option>Mobile Wallet</option>
-            <option>Credit (Udhaar)</option>
+            <option data-i18n="cash">Cash</option>
+            <option data-i18n="card">Card</option>
+            <option data-i18n="mobileWallet">Mobile Wallet</option>
+            <option data-i18n="creditUdhaar">Credit (Udhaar)</option>
           </select>
         </div>
         <div style="margin-top:14px;display:none;" id="creditCustomerBox">
-          <label>Customer *</label>
+          <label data-i18n="customerRequired">Customer *</label>
           <select id="creditCustomerSelect"></select>
         </div>
         <div style="margin-top:14px;">
-          <label>Cash Received</label>
+          <label data-i18n="cashReceived">Cash Received</label>
           <input type="number" id="cashReceived" placeholder="0.00">
           <div id="changeDue" style="margin-top:6px;font-size:13px;color:var(--muted);"></div>
         </div>
-        <button class="btn green" id="checkoutBtn" style="width:100%;margin-top:16px;padding:12px;font-size:16px;">Complete Sale &amp; Print Receipt</button>
+        <button class="btn green" id="checkoutBtn" style="width:100%;margin-top:16px;padding:12px;font-size:16px;" data-i18n="completeSale">Complete Sale &amp; Print Receipt</button>
       </div>
     </div>
   </div>
@@ -373,13 +379,13 @@
   <!-- INVENTORY VIEW -->
   <div class="view" id="view-inventory">
     <div class="panel">
-      <h2>Manage Categories</h2>
+      <h2 data-i18n="manageCategories">Manage Categories</h2>
       <div class="row">
         <div style="flex:1;min-width:200px;">
-          <label>New Category Name</label>
+          <label data-i18n="newCategoryName">New Category Name</label>
           <input id="newCategoryInput" placeholder="e.g. Frozen Foods">
         </div>
-        <button class="btn" id="addCategoryBtn">Add Category</button>
+        <button class="btn" id="addCategoryBtn" data-i18n="addCategory">Add Category</button>
       </div>
       <div id="categoryChips" style="margin-top:12px;"></div>
     </div>
@@ -387,86 +393,86 @@
     <div class="panel">
       <div class="flex-between">
         <div>
-          <h2>Scan Inventory Sheet</h2>
-          <p class="hint">Take or upload a photo of a printed inventory list — you'll get to review and fix everything before it's added.</p>
+          <h2 data-i18n="scanInventorySheet">Scan Inventory Sheet</h2>
+          <p class="hint" data-i18n="scanInventorySheetHint">Take or upload a photo of a printed inventory list — you'll get to review and fix everything before it's added.</p>
         </div>
-        <button class="btn" id="openScanSheetBtn">📷 Scan a Page</button>
+        <button class="btn" id="openScanSheetBtn" data-i18n="scanAPage">📷 Scan a Page</button>
       </div>
     </div>
 
     <div class="panel">
-      <h2 id="invFormTitle">Add New Item</h2>
+      <h2 id="invFormTitle" data-i18n="addNewItem">Add New Item</h2>
       <form id="invForm">
         <input type="hidden" id="itemId">
         <div class="grid grid-3">
           <div>
-            <label>Item Name *</label>
+            <label data-i18n="itemNameRequired">Item Name *</label>
             <input id="itemName" required>
           </div>
           <div>
-            <label>Barcode (leave blank if none)</label>
+            <label data-i18n="barcodeOptional">Barcode (leave blank if none)</label>
             <div style="display:flex;gap:6px;">
               <input id="itemBarcode" placeholder="Click here, then scan with your barcode gun (or type it)">
-              <button type="button" class="btn secondary" id="itemBarcodeScanBtn" title="No physical scanner? Tap to use your camera instead">📷 Camera</button>
+              <button type="button" class="btn secondary" id="itemBarcodeScanBtn" title="No physical scanner? Tap to use your camera instead" data-i18n="camera">📷 Camera</button>
             </div>
           </div>
           <div>
-            <label>Category *</label>
+            <label data-i18n="categoryRequired">Category *</label>
             <select id="itemCategory" required></select>
           </div>
         </div>
         <div class="grid grid-4" style="margin-top:10px;">
           <div>
-            <label>Buying Price (per unit) *</label>
+            <label data-i18n="buyingPriceRequired">Buying Price (per unit) *</label>
             <input type="number" id="itemCost" step="0.01" min="0" required title="What you pay to bring one unit in — used by the Financials tab's Money Out.">
           </div>
           <div>
-            <label>Price *</label>
+            <label data-i18n="priceRequired">Price *</label>
             <input type="number" id="itemPrice" step="0.01" min="0" required>
           </div>
           <div>
-            <label>Stock Qty *</label>
+            <label data-i18n="stockQtyRequired">Stock Qty *</label>
             <input type="number" id="itemStock" step="1" min="0" required>
           </div>
           <div>
-            <label>Unit</label>
+            <label data-i18n="unit">Unit</label>
             <input id="itemUnit" placeholder="pcs / kg / ltr" value="pcs">
           </div>
         </div>
         <div class="grid grid-4" style="margin-top:10px;">
           <div>
-            <label>Low Stock Alert Below</label>
+            <label data-i18n="lowStockAlertBelow">Low Stock Alert Below</label>
             <input type="number" id="itemLowStock" step="1" min="0" value="5">
           </div>
           <div>
-            <label>Expiry Date (optional)</label>
+            <label data-i18n="expiryDateOptional">Expiry Date (optional)</label>
             <input type="date" id="itemExpiry" title="For perishables — shows up in the Dashboard's Near Expiry alert.">
           </div>
         </div>
         <div class="row" style="margin-top:12px;">
-          <button type="submit" class="btn" id="invSaveBtn">Add Item</button>
-          <button type="button" class="btn secondary" id="invCancelBtn" style="display:none;">Cancel Edit</button>
+          <button type="submit" class="btn" id="invSaveBtn" data-i18n="addItem">Add Item</button>
+          <button type="button" class="btn secondary" id="invCancelBtn" style="display:none;" data-i18n="cancelEdit">Cancel Edit</button>
         </div>
       </form>
     </div>
 
     <div class="panel">
       <div class="flex-between">
-        <h2>Inventory (<span id="invCount">0</span> items)</h2>
-        <button class="btn secondary small" id="toggleGroupBtn">Group by Category: On</button>
+        <h2><span data-i18n="inventory">Inventory</span> (<span id="invCount">0</span> <span data-i18n="items">items</span>)</h2>
+        <button class="btn secondary small" id="toggleGroupBtn" data-i18n="groupByCategoryOn">Group by Category: On</button>
       </div>
       <div class="filter-bar">
-        <input id="invSearch" placeholder="Search by name, barcode, or category...">
-        <select id="invCatFilter"><option value="all">All categories</option></select>
+        <input id="invSearch" placeholder="Search by name, barcode, or category..." data-i18n-placeholder="searchByNameBarcodeCategory">
+        <select id="invCatFilter"><option value="all" data-i18n="allCategories">All categories</option></select>
         <select id="invStockFilter">
-          <option value="all">All stock levels</option>
-          <option value="low">Low stock</option>
-          <option value="out">Out of stock</option>
-          <option value="nobarcode">No barcode only</option>
+          <option value="all" data-i18n="allStockLevels">All stock levels</option>
+          <option value="low" data-i18n="lowStock">Low stock</option>
+          <option value="out" data-i18n="outOfStock2">Out of stock</option>
+          <option value="nobarcode" data-i18n="noBarcodeOnly">No barcode only</option>
         </select>
       </div>
       <div id="invGrouped"></div>
-      <div id="invEmpty" class="empty" style="display:none;">No items yet — add your first item above.</div>
+      <div id="invEmpty" class="empty" style="display:none;" data-i18n="noItemsYet">No items yet — add your first item above.</div>
     </div>
   </div>
 
@@ -474,24 +480,24 @@
   <div class="view" id="view-itemCatalog">
     <div class="panel">
       <div class="flex-between">
-        <h2>Item Database (<span id="catalogCount">0</span> items)</h2>
-        <span class="hint">Not live inventory — use "Add to Inventory" on an item once you actually stock it.</span>
+        <h2><span data-i18n="itemDatabase">Item Database</span> (<span id="catalogCount">0</span> <span data-i18n="items">items</span>)</h2>
+        <span class="hint" data-i18n="itemDatabaseHint">Not live inventory — use "Add to Inventory" on an item once you actually stock it.</span>
       </div>
       <div class="filter-bar">
-        <input id="catalogSearch" placeholder="Search by name, barcode, category, or brand...">
-        <button class="btn secondary small" id="catalogScanBtn" title="Scan a barcode with your camera">📷 Scan</button>
-        <select id="catalogCatFilter"><option value="all">All categories</option></select>
-        <select id="catalogBrandFilter"><option value="all">All brands</option></select>
+        <input id="catalogSearch" placeholder="Search by name, barcode, category, or brand..." data-i18n-placeholder="searchByNameBarcodeCategoryBrand">
+        <button class="btn secondary small" id="catalogScanBtn" title="Scan a barcode with your camera" data-i18n="scan">📷 Scan</button>
+        <select id="catalogCatFilter"><option value="all" data-i18n="allCategories">All categories</option></select>
+        <select id="catalogBrandFilter"><option value="all" data-i18n="allBrands">All brands</option></select>
       </div>
       <table>
-        <thead><tr><th>Name</th><th>Barcode</th><th>Category</th><th>Brand</th><th>Suggested Buying Price</th><th>Price</th><th></th></tr></thead>
+        <thead><tr><th data-i18n="name">Name</th><th data-i18n="barcode">Barcode</th><th data-i18n="category">Category</th><th data-i18n="brand">Brand</th><th data-i18n="suggestedBuyingPrice">Suggested Buying Price</th><th data-i18n="price">Price</th><th></th></tr></thead>
         <tbody id="catalogBody"></tbody>
       </table>
-      <div id="catalogEmpty" class="empty" style="display:none;">No catalog items match your search.</div>
+      <div id="catalogEmpty" class="empty" style="display:none;" data-i18n="noCatalogMatch">No catalog items match your search.</div>
       <div class="row" style="margin-top:10px;align-items:center;">
-        <button class="btn secondary small" id="catalogPrevPageBtn">← Previous Page</button>
+        <button class="btn secondary small" id="catalogPrevPageBtn" data-i18n="previousPage">← Previous Page</button>
         <span id="catalogPageLabel" style="font-size:13px;color:var(--muted);">Page 1 of 1</span>
-        <button class="btn secondary small" id="catalogNextPageBtn">Next Page →</button>
+        <button class="btn secondary small" id="catalogNextPageBtn" data-i18n="nextPage">Next Page →</button>
       </div>
     </div>
   </div>
@@ -499,81 +505,81 @@
   <!-- PURCHASES VIEW -->
   <div class="view" id="view-purchases">
     <div class="panel">
-      <h2>Suppliers</h2>
-      <p class="hint">Keep track of who you buy your stock from.</p>
+      <h2 data-i18n="suppliers">Suppliers</h2>
+      <p class="hint" data-i18n="suppliersHint">Keep track of who you buy your stock from.</p>
       <div class="grid grid-3">
-        <div><label>Supplier Name *</label><input id="newSupplierName" placeholder="e.g. City Wholesale Mart"></div>
-        <div><label>Contact Phone</label><input id="newSupplierContact" placeholder="03xx-xxxxxxx"></div>
-        <div><label>Address / Notes</label><input id="newSupplierAddress" placeholder="Optional"></div>
+        <div><label data-i18n="supplierNameRequired">Supplier Name *</label><input id="newSupplierName" placeholder="e.g. City Wholesale Mart"></div>
+        <div><label data-i18n="contactPhone">Contact Phone</label><input id="newSupplierContact" placeholder="03xx-xxxxxxx"></div>
+        <div><label data-i18n="addressNotes">Address / Notes</label><input id="newSupplierAddress" placeholder="Optional"></div>
       </div>
       <div class="row" style="margin-top:10px;">
-        <button class="btn" id="addSupplierBtn">Add Supplier</button>
+        <button class="btn" id="addSupplierBtn" data-i18n="addSupplier">Add Supplier</button>
       </div>
       <div id="supplierChips" style="margin-top:12px;"></div>
     </div>
 
     <div class="panel">
-      <h2>Record a Purchase (Stock In)</h2>
+      <h2 data-i18n="recordPurchase">Record a Purchase (Stock In)</h2>
       <form id="purchaseForm">
         <div class="grid grid-3">
           <div>
-            <label>Supplier *</label>
+            <label data-i18n="supplierRequired">Supplier *</label>
             <select id="purchaseSupplier" required></select>
           </div>
           <div style="position:relative;">
-            <label>Item *</label>
+            <label data-i18n="itemRequired">Item *</label>
             <div style="display:flex;gap:6px;">
-              <input id="purchaseItemSearch" autocomplete="off" placeholder="Type to search items...">
+              <input id="purchaseItemSearch" autocomplete="off" placeholder="Type to search items..." data-i18n-placeholder="typeToSearchItems">
               <button type="button" class="btn secondary" id="purchaseItemScanBtn" title="Scan a barcode with your camera">📷</button>
             </div>
             <input type="hidden" id="purchaseItem">
             <div id="purchaseItemDropdown" class="combo-dropdown" style="display:none;"></div>
           </div>
           <div>
-            <label>Purchase Date *</label>
+            <label data-i18n="purchaseDateRequired">Purchase Date *</label>
             <input type="date" id="purchaseDate" required>
           </div>
         </div>
         <div class="grid grid-3" style="margin-top:10px;">
-          <div><label>Quantity Purchased *</label><input type="number" id="purchaseQty" min="1" step="1" required></div>
-          <div><label>Cost Per Unit *</label><input type="number" id="purchaseCost" min="0" step="0.01" required></div>
-          <div><label>Proof of Purchase (receipt / invoice image)</label><input type="file" id="purchaseProof" accept="image/*"></div>
+          <div><label data-i18n="qtyPurchasedRequired">Quantity Purchased *</label><input type="number" id="purchaseQty" min="1" step="1" required></div>
+          <div><label data-i18n="costPerUnitRequired">Cost Per Unit *</label><input type="number" id="purchaseCost" min="0" step="0.01" required></div>
+          <div><label data-i18n="proofOfPurchase">Proof of Purchase (receipt / invoice image)</label><input type="file" id="purchaseProof" accept="image/*"></div>
         </div>
         <div class="grid grid-3" style="margin-top:10px;">
-          <div><label>Expiry Date (optional)</label><input type="date" id="purchaseExpiry" title="Sets/updates this item's expiry date on the Dashboard's Near Expiry alert."></div>
+          <div><label data-i18n="expiryDateOptional">Expiry Date (optional)</label><input type="date" id="purchaseExpiry" title="Sets/updates this item's expiry date on the Dashboard's Near Expiry alert."></div>
         </div>
         <div id="proofPreviewBox" style="margin-top:8px;display:none;">
           <img id="proofPreviewImg" src="" style="max-width:120px;max-height:120px;border-radius:6px;border:1px solid var(--border);">
-          <button type="button" class="btn secondary small" id="removeProofBtn">Remove</button>
+          <button type="button" class="btn secondary small" id="removeProofBtn" data-i18n="remove">Remove</button>
         </div>
         <div style="margin-top:10px;">
-          <label>Notes</label>
+          <label data-i18n="notes">Notes</label>
           <input id="purchaseNotes" placeholder="Optional">
         </div>
         <div class="switch-row" style="justify-content:flex-start;gap:10px;">
           <label class="switch"><input type="checkbox" id="purchaseAddStock" checked><span class="slider"></span></label>
-          <span>Add this quantity to current stock automatically</span>
+          <span data-i18n="addQtyToStockAuto">Add this quantity to current stock automatically</span>
         </div>
         <div class="row" style="margin-top:12px;">
-          <button type="submit" class="btn">Record Purchase</button>
+          <button type="submit" class="btn" data-i18n="recordPurchaseBtn">Record Purchase</button>
         </div>
       </form>
     </div>
 
     <div class="panel">
       <div class="flex-between">
-        <h2>Purchase History</h2>
+        <h2 data-i18n="purchaseHistory">Purchase History</h2>
         <span id="purchaseSummary" style="font-size:13px;color:var(--muted);"></span>
       </div>
       <table>
-        <thead><tr><th>Date</th><th>Supplier</th><th>Item</th><th>Qty</th><th>Cost/Unit</th><th>Total</th><th>Proof</th><th>Notes</th><th></th></tr></thead>
+        <thead><tr><th data-i18n="date">Date</th><th data-i18n="supplier">Supplier</th><th data-i18n="item">Item</th><th data-i18n="qty">Qty</th><th data-i18n="costPerUnit">Cost/Unit</th><th data-i18n="total">Total</th><th data-i18n="proof">Proof</th><th data-i18n="notes">Notes</th><th></th></tr></thead>
         <tbody id="purchaseBody"></tbody>
       </table>
-      <div id="purchaseEmpty" class="empty" style="display:none;">No purchases recorded yet.</div>
+      <div id="purchaseEmpty" class="empty" style="display:none;" data-i18n="noPurchasesYet">No purchases recorded yet.</div>
       <div class="row" style="margin-top:10px;align-items:center;">
-        <button class="btn secondary small" id="purchasePrevPageBtn">← Previous Page</button>
+        <button class="btn secondary small" id="purchasePrevPageBtn" data-i18n="previousPage">← Previous Page</button>
         <span id="purchasePageLabel" style="font-size:13px;color:var(--muted);">Page 1 of 1</span>
-        <button class="btn secondary small" id="purchaseNextPageBtn">Next Page →</button>
+        <button class="btn secondary small" id="purchaseNextPageBtn" data-i18n="nextPage">Next Page →</button>
       </div>
     </div>
   </div>
@@ -581,32 +587,32 @@
   <!-- CUSTOMERS (UDHAAR/CREDIT) VIEW -->
   <div class="view" id="view-customers">
     <div class="panel">
-      <h2 id="customerFormTitle">Add Customer</h2>
+      <h2 id="customerFormTitle" data-i18n="addCustomer">Add Customer</h2>
       <form id="customerForm">
         <input type="hidden" id="customerId">
         <div class="grid grid-3">
-          <div><label>Name *</label><input id="customerName2" required placeholder="e.g. Aslam Bhai"></div>
-          <div><label>Phone</label><input id="customerPhone" placeholder="03xx-xxxxxxx"></div>
-          <div><label>Notes</label><input id="customerNotes" placeholder="Optional"></div>
+          <div><label data-i18n="nameRequired">Name *</label><input id="customerName2" required placeholder="e.g. Aslam Bhai"></div>
+          <div><label data-i18n="phone">Phone</label><input id="customerPhone" placeholder="03xx-xxxxxxx"></div>
+          <div><label data-i18n="notes">Notes</label><input id="customerNotes" placeholder="Optional"></div>
         </div>
         <div class="row" style="margin-top:12px;">
-          <button type="submit" class="btn" id="customerSaveBtn">Add Customer</button>
-          <button type="button" class="btn secondary" id="customerCancelBtn" style="display:none;">Cancel Edit</button>
+          <button type="submit" class="btn" id="customerSaveBtn" data-i18n="addCustomer">Add Customer</button>
+          <button type="button" class="btn secondary" id="customerCancelBtn" style="display:none;" data-i18n="cancelEdit">Cancel Edit</button>
         </div>
       </form>
     </div>
 
     <div class="panel">
       <div class="flex-between">
-        <h2>Customers (<span id="customerCount">0</span>)</h2>
-        <span class="hint">Total outstanding: <span id="customerTotalOwed">Rs 0</span></span>
+        <h2><span data-i18n="customers">Customers</span> (<span id="customerCount">0</span>)</h2>
+        <span class="hint"><span data-i18n="totalOutstanding">Total outstanding:</span> <span id="customerTotalOwed">Rs 0</span></span>
       </div>
-      <input id="customerSearch" placeholder="Search by name or phone..." style="margin-bottom:10px;">
+      <input id="customerSearch" placeholder="Search by name or phone..." style="margin-bottom:10px;" data-i18n-placeholder="searchByNamePhone">
       <table>
-        <thead><tr><th>Name</th><th>Phone</th><th>Notes</th><th>Balance Owed</th><th></th></tr></thead>
+        <thead><tr><th data-i18n="name">Name</th><th data-i18n="phone">Phone</th><th data-i18n="notes">Notes</th><th data-i18n="balanceOwed">Balance Owed</th><th></th></tr></thead>
         <tbody id="customerBody"></tbody>
       </table>
-      <div id="customerEmpty" class="empty" style="display:none;">No customers yet — add your first one above.</div>
+      <div id="customerEmpty" class="empty" style="display:none;" data-i18n="noCustomersYet">No customers yet — add your first one above.</div>
     </div>
   </div>
 
@@ -614,34 +620,34 @@
   <div class="view" id="view-sales">
     <div class="panel">
       <div class="flex-between">
-        <h2>Sales History</h2>
+        <h2 data-i18n="salesHistory">Sales History</h2>
         <span id="salesSummary" style="font-size:13px;color:var(--muted);"></span>
       </div>
       <div class="row" style="margin-bottom:10px;">
-        <button class="btn secondary small date-tab" data-range="today">Today</button>
-        <button class="btn secondary small date-tab" data-range="week">This Week</button>
-        <button class="btn secondary small date-tab" data-range="month">This Month</button>
-        <button class="btn secondary small date-tab active" data-range="all">All Time</button>
-        <button class="btn secondary small date-tab" data-range="custom">Custom Range</button>
+        <button class="btn secondary small date-tab" data-range="today" data-i18n="today">Today</button>
+        <button class="btn secondary small date-tab" data-range="week" data-i18n="thisWeek">This Week</button>
+        <button class="btn secondary small date-tab" data-range="month" data-i18n="thisMonth">This Month</button>
+        <button class="btn secondary small date-tab active" data-range="all" data-i18n="allTime">All Time</button>
+        <button class="btn secondary small date-tab" data-range="custom" data-i18n="customRange">Custom Range</button>
       </div>
       <div class="row" id="customRangeBox" style="display:none;">
-        <div><label>From</label><input type="date" id="customFrom"></div>
-        <div><label>To</label><input type="date" id="customTo"></div>
-        <button class="btn small" id="applyCustomRangeBtn">Apply</button>
+        <div><label data-i18n="from">From</label><input type="date" id="customFrom"></div>
+        <div><label data-i18n="to">To</label><input type="date" id="customTo"></div>
+        <button class="btn small" id="applyCustomRangeBtn" data-i18n="apply">Apply</button>
       </div>
       <div class="filter-bar">
-        <input id="salesSearch" placeholder="Search by receipt # or customer...">
-        <button class="btn secondary small" id="clearHistoryBtn">Clear History</button>
+        <input id="salesSearch" placeholder="Search by receipt # or customer..." data-i18n-placeholder="searchByReceiptCustomer">
+        <button class="btn secondary small" id="clearHistoryBtn" data-i18n="clearHistory">Clear History</button>
       </div>
       <table>
-        <thead><tr><th>Receipt #</th><th>Date/Time</th><th>Customer</th><th>Cashier</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th data-i18n="receiptHash">Receipt #</th><th data-i18n="dateTime">Date/Time</th><th data-i18n="customer">Customer</th><th data-i18n="cashier">Cashier</th><th data-i18n="items">Items</th><th data-i18n="total">Total</th><th data-i18n="payment">Payment</th><th data-i18n="status">Status</th><th></th></tr></thead>
         <tbody id="salesBody"></tbody>
       </table>
-      <div id="salesEmpty" class="empty" style="display:none;">No sales in this range.</div>
+      <div id="salesEmpty" class="empty" style="display:none;" data-i18n="noSalesRange">No sales in this range.</div>
       <div class="row" style="margin-top:10px;align-items:center;">
-        <button class="btn secondary small" id="salesPrevPageBtn">← Previous Page</button>
+        <button class="btn secondary small" id="salesPrevPageBtn" data-i18n="previousPage">← Previous Page</button>
         <span id="salesPageLabel" style="font-size:13px;color:var(--muted);">Page 1 of 1</span>
-        <button class="btn secondary small" id="salesNextPageBtn">Next Page →</button>
+        <button class="btn secondary small" id="salesNextPageBtn" data-i18n="nextPage">Next Page →</button>
       </div>
     </div>
   </div>
@@ -649,71 +655,71 @@
   <!-- FINANCIALS VIEW -->
   <div class="view" id="view-financials">
     <div class="panel">
-      <h2>Money In vs Money Out</h2>
+      <h2 data-i18n="moneyInVsOut">Money In vs Money Out</h2>
       <div class="row" style="margin-bottom:10px;">
-        <button class="btn secondary small fin-date-tab" data-range="today">Today</button>
-        <button class="btn secondary small fin-date-tab" data-range="week">This Week</button>
-        <button class="btn secondary small fin-date-tab" data-range="month">This Month</button>
-        <button class="btn secondary small fin-date-tab active" data-range="all">All Time</button>
-        <button class="btn secondary small fin-date-tab" data-range="custom">Custom Range</button>
+        <button class="btn secondary small fin-date-tab" data-range="today" data-i18n="today">Today</button>
+        <button class="btn secondary small fin-date-tab" data-range="week" data-i18n="thisWeek">This Week</button>
+        <button class="btn secondary small fin-date-tab" data-range="month" data-i18n="thisMonth">This Month</button>
+        <button class="btn secondary small fin-date-tab active" data-range="all" data-i18n="allTime">All Time</button>
+        <button class="btn secondary small fin-date-tab" data-range="custom" data-i18n="customRange">Custom Range</button>
       </div>
       <div class="row" id="finCustomRangeBox" style="display:none;">
-        <div><label>From</label><input type="date" id="finCustomFrom"></div>
-        <div><label>To</label><input type="date" id="finCustomTo"></div>
-        <button class="btn small" id="finApplyCustomRangeBtn">Apply</button>
+        <div><label data-i18n="from">From</label><input type="date" id="finCustomFrom"></div>
+        <div><label data-i18n="to">To</label><input type="date" id="finCustomTo"></div>
+        <button class="btn small" id="finApplyCustomRangeBtn" data-i18n="apply">Apply</button>
       </div>
       <div class="grid grid-3" style="margin-top:14px;">
         <div class="panel stat-card" style="border-color:var(--green);">
-          <div class="label">Money In (Sales Revenue)</div>
+          <div class="label" data-i18n="moneyInSalesRevenue">Money In (Sales Revenue)</div>
           <div class="value" id="finMoneyIn">Rs 0</div>
         </div>
         <div class="panel stat-card" style="border-color:var(--red);">
-          <div class="label">Money Out (Purchases + Expenses)</div>
+          <div class="label" data-i18n="moneyOutPurchasesExpenses">Money Out (Purchases + Expenses)</div>
           <div class="value" id="finMoneyOut">Rs 0</div>
         </div>
         <div class="panel stat-card" id="finNetCard" style="border-color:var(--blue);">
-          <div class="label">Net Profit / Loss</div>
+          <div class="label" data-i18n="netProfitLoss">Net Profit / Loss</div>
           <div class="value" id="finNet">Rs 0</div>
         </div>
       </div>
-      <p class="hint" style="margin-top:8px;">Money Out breaks down as: Stock Purchases <span id="finPurchasesOut">Rs 0</span> + Other Expenses <span id="finExpensesOut">Rs 0</span>.</p>
+      <p class="hint" style="margin-top:8px;"><span data-i18n="moneyOutBreaksDown">Money Out breaks down as: Stock Purchases</span> <span id="finPurchasesOut">Rs 0</span> + <span data-i18n="otherExpenses">Other Expenses</span> <span id="finExpensesOut">Rs 0</span>.</p>
     </div>
 
     <div class="panel">
-      <h2>Log an Expense</h2>
-      <p class="hint">For rent, utilities, salaries, and other costs that aren't buying inventory stock (use Purchases for that).</p>
+      <h2 data-i18n="logExpense">Log an Expense</h2>
+      <p class="hint" data-i18n="logExpenseHint">For rent, utilities, salaries, and other costs that aren't buying inventory stock (use Purchases for that).</p>
       <form id="expenseForm">
         <div class="grid grid-4">
-          <div><label>Month (which period this is for) *</label><input type="month" id="expensePeriod" required></div>
-          <div><label>Date Paid *</label><input type="date" id="expenseDate" required></div>
+          <div><label data-i18n="monthPeriodRequired">Month (which period this is for) *</label><input type="month" id="expensePeriod" required></div>
+          <div><label data-i18n="datePaidRequired">Date Paid *</label><input type="date" id="expenseDate" required></div>
           <div>
-            <label>Category *</label>
+            <label data-i18n="categoryRequired">Category *</label>
             <select id="expenseCategory" required>
-              <option>Rent</option>
-              <option>Utilities</option>
-              <option>Salaries</option>
-              <option>Transport</option>
-              <option>Maintenance</option>
-              <option>Miscellaneous</option>
-              <option>Other</option>
+              <option data-i18n="rent">Rent</option>
+              <option data-i18n="utilities">Utilities</option>
+              <option data-i18n="salaries">Salaries</option>
+              <option data-i18n="transport">Transport</option>
+              <option data-i18n="maintenance">Maintenance</option>
+              <option data-i18n="miscellaneous">Miscellaneous</option>
+              <option data-i18n="other">Other</option>
             </select>
           </div>
-          <div><label>Amount *</label><input type="number" id="expenseAmount" min="0" step="0.01" required></div>
+          <div><label data-i18n="amountRequired">Amount *</label><input type="number" id="expenseAmount" min="0" step="0.01" required></div>
         </div>
-        <div style="margin-top:12px;"><label>Notes</label><input id="expenseNotes" placeholder="Optional"></div>
+        <div style="margin-top:12px;"><label data-i18n="notes">Notes</label><input id="expenseNotes" placeholder="Optional"></div>
         <div class="row" style="margin-top:12px;">
-          <button type="submit" class="btn">Log Expense</button>
+          <button type="submit" class="btn" data-i18n="logExpenseBtn">Log Expense</button>
         </div>
       </form>
     </div>
 
     <div class="panel">
       <div class="flex-between">
-        <h2>Expenses (this range)</h2>
+        <h2 data-i18n="expensesThisRange">Expenses (this range)</h2>
         <span id="expenseSummary" style="font-size:13px;color:var(--muted);"></span>
       </div>
       <div id="expenseGroups"></div>
-      <div id="expenseEmpty" class="empty" style="display:none;">No expenses logged in this range.</div>
+      <div id="expenseEmpty" class="empty" style="display:none;" data-i18n="noExpensesRange">No expenses logged in this range.</div>
     </div>
   </div>
 
@@ -721,74 +727,83 @@
   <div class="view" id="view-settings">
     <div class="panel">
       <div class="settings-section">
-        <h3>Store Information</h3>
+        <h3 data-i18n="storeInformation">Store Information</h3>
         <div class="grid grid-2">
-          <div><label>Store Name</label><input id="setStoreName"></div>
-          <div><label>Phone Number</label><input id="setPhone"></div>
+          <div><label data-i18n="storeName">Store Name</label><input id="setStoreName"></div>
+          <div><label data-i18n="phoneNumber">Phone Number</label><input id="setPhone"></div>
         </div>
-        <div style="margin-top:10px;"><label>Address</label><input id="setAddress"></div>
+        <div style="margin-top:10px;"><label data-i18n="address">Address</label><input id="setAddress"></div>
       </div>
 
       <div class="settings-section">
-        <h3>Billing Defaults</h3>
+        <h3 data-i18n="billingDefaults">Billing Defaults</h3>
         <div class="grid grid-3">
-          <div><label>Currency Symbol</label><input id="setCurrency" placeholder="Rs / $ / €"></div>
-          <div><label>Default Tax (%)</label><input type="number" id="setDefaultTax" min="0" max="100"></div>
-          <div><label>Default Discount (%)</label><input type="number" id="setDefaultDiscount" min="0" max="100"></div>
+          <div><label data-i18n="currencySymbol">Currency Symbol</label><input id="setCurrency" placeholder="Rs / $ / €"></div>
+          <div><label data-i18n="defaultTax">Default Tax (%)</label><input type="number" id="setDefaultTax" min="0" max="100"></div>
+          <div><label data-i18n="defaultDiscount">Default Discount (%)</label><input type="number" id="setDefaultDiscount" min="0" max="100"></div>
         </div>
-        <div style="margin-top:10px;"><label>Default Low Stock Threshold</label><input type="number" id="setDefaultLowStock" min="0"></div>
+        <div style="margin-top:10px;"><label data-i18n="defaultLowStockThreshold">Default Low Stock Threshold</label><input type="number" id="setDefaultLowStock" min="0"></div>
       </div>
 
       <div class="settings-section">
-        <h3>Receipt</h3>
-        <label>Receipt Footer Message</label>
+        <h3 data-i18n="receipt">Receipt</h3>
+        <label data-i18n="receiptFooterMessage">Receipt Footer Message</label>
         <textarea id="setReceiptFooter" rows="2"></textarea>
         <div style="margin-top:10px;">
-          <label>Printer Paper Width</label>
+          <label data-i18n="printerPaperWidth">Printer Paper Width</label>
           <select id="setReceiptWidth">
-            <option value="58mm">58mm thermal receipt printer</option>
-            <option value="80mm">80mm thermal receipt printer</option>
-            <option value="a4">Standard paper (A4 / Letter)</option>
+            <option value="58mm" data-i18n="printer58">58mm thermal receipt printer</option>
+            <option value="80mm" data-i18n="printer80">80mm thermal receipt printer</option>
+            <option value="a4" data-i18n="printerA4">Standard paper (A4 / Letter)</option>
           </select>
-          <p class="hint" style="margin-top:4px;">Match this to your printer so receipts don't print oversized or cut off. If unsure, most small receipt printers are 80mm.</p>
+          <p class="hint" style="margin-top:4px;" data-i18n="printerHint">Match this to your printer so receipts don't print oversized or cut off. If unsure, most small receipt printers are 80mm.</p>
         </div>
       </div>
 
       <div class="settings-section">
-        <h3>Appearance</h3>
+        <h3 data-i18n="appearance">Appearance</h3>
         <div class="switch-row">
-          <span>Dark Mode</span>
+          <span data-i18n="darkMode">Dark Mode</span>
           <label class="switch"><input type="checkbox" id="setDarkMode"><span class="slider"></span></label>
+        </div>
+        <div style="margin-top:10px;">
+          <label data-i18n="fontSize">Font Size</label>
+          <select id="setFontSize">
+            <option value="small" data-i18n="fontSmall">Small</option>
+            <option value="normal" data-i18n="fontNormal">Normal</option>
+            <option value="large" data-i18n="fontLarge">Large</option>
+            <option value="xlarge" data-i18n="fontExtraLarge">Extra Large</option>
+          </select>
         </div>
       </div>
 
       <div class="row">
-        <button class="btn" id="saveSettingsBtn">Save Settings</button>
-        <span id="settingsSavedMsg" style="color:var(--green);font-size:13px;display:none;">Saved ✓</span>
+        <button class="btn" id="saveSettingsBtn" data-i18n="saveSettings">Save Settings</button>
+        <span id="settingsSavedMsg" style="color:var(--green);font-size:13px;display:none;" data-i18n="savedCheck">Saved ✓</span>
       </div>
     </div>
 
     <div class="panel">
-      <h3>Cashiers</h3>
-      <p class="hint">Track who rang up each sale. PIN is optional — leave blank for no PIN check.</p>
+      <h3 data-i18n="cashiers">Cashiers</h3>
+      <p class="hint" data-i18n="cashiersHint">Track who rang up each sale. PIN is optional — leave blank for no PIN check.</p>
       <div class="grid grid-3">
-        <div><label>Cashier Name *</label><input id="newCashierName" placeholder="e.g. Ali"></div>
-        <div><label>PIN (optional)</label><input id="newCashierPin" placeholder="4 digits" maxlength="8"></div>
-        <div style="display:flex;align-items:end;"><button class="btn" id="addCashierBtn" style="width:100%;">Add Cashier</button></div>
+        <div><label data-i18n="cashierNameRequired">Cashier Name *</label><input id="newCashierName" placeholder="e.g. Ali"></div>
+        <div><label data-i18n="pinOptional">PIN (optional)</label><input id="newCashierPin" placeholder="4 digits" maxlength="8"></div>
+        <div style="display:flex;align-items:end;"><button class="btn" id="addCashierBtn" style="width:100%;" data-i18n="addCashier">Add Cashier</button></div>
       </div>
       <div id="cashierChips" style="margin-top:12px;"></div>
     </div>
 
     <div class="panel">
       <div class="flex-between">
-        <h3>Shift History</h3>
+        <h3 data-i18n="shiftHistory">Shift History</h3>
         <span id="shiftHistorySummary" style="font-size:13px;color:var(--muted);"></span>
       </div>
       <table>
-        <thead><tr><th>Closed</th><th>Cashier</th><th>Expected</th><th>Counted</th><th>Difference</th><th></th></tr></thead>
+        <thead><tr><th data-i18n="closed">Closed</th><th data-i18n="cashier">Cashier</th><th data-i18n="expected">Expected</th><th data-i18n="counted">Counted</th><th data-i18n="difference">Difference</th><th></th></tr></thead>
         <tbody id="shiftHistoryBody"></tbody>
       </table>
-      <div id="shiftHistoryEmpty" class="empty" style="display:none;">No shifts closed yet.</div>
+      <div id="shiftHistoryEmpty" class="empty" style="display:none;" data-i18n="noShiftsClosed">No shifts closed yet.</div>
     </div>
 
     <div class="panel" id="ownerGatePanel">
@@ -856,11 +871,11 @@
     </div>
 
     <div class="panel">
-      <h3>Data Management</h3>
-      <p class="hint">Export a full backup (items, categories, suppliers, purchases, cashiers, held sales, refunds, sales, settings) or restore from a previous backup file.</p>
+      <h3 data-i18n="dataManagement">Data Management</h3>
+      <p class="hint" data-i18n="dataManagementHint">Export a full backup (items, categories, suppliers, purchases, cashiers, held sales, refunds, sales, settings) or restore from a previous backup file.</p>
       <div class="row">
-        <button class="btn secondary" id="exportDataBtn">Export Backup (.json)</button>
-        <button class="btn secondary" id="importDataBtn">Import Backup</button>
+        <button class="btn secondary" id="exportDataBtn" data-i18n="exportBackup">Export Backup (.json)</button>
+        <button class="btn secondary" id="importDataBtn" data-i18n="importBackup">Import Backup</button>
         <input type="file" id="importFileInput" accept=".json" style="display:none;">
       </div>
     </div>
@@ -873,8 +888,8 @@
   <div>
     <div class="receipt-paper" id="receiptContent"></div>
     <div class="modal-actions">
-      <button class="btn" id="printReceiptBtn">Print</button>
-      <button class="btn secondary" id="closeReceiptBtn">Close</button>
+      <button class="btn" id="printReceiptBtn" data-i18n="print">Print</button>
+      <button class="btn secondary" id="closeReceiptBtn" data-i18n="close">Close</button>
     </div>
   </div>
 </div>
@@ -884,7 +899,7 @@
     <video id="cameraVideo" playsinline autoplay muted></video>
     <div class="camera-status" id="cameraStatus"></div>
     <div style="margin-top:10px;">
-      <button class="btn secondary" id="closeCameraBtn">Close</button>
+      <button class="btn secondary" id="closeCameraBtn" data-i18n="close">Close</button>
     </div>
   </div>
 </div>
@@ -893,45 +908,45 @@
   <div class="proof-viewer">
     <img id="proofViewerImg" src="">
     <div class="modal-actions">
-      <button class="btn secondary" id="closeProofBtn">Close</button>
+      <button class="btn secondary" id="closeProofBtn" data-i18n="close">Close</button>
     </div>
   </div>
 </div>
 
 <div id="cashierModal">
   <div class="panel" style="width:340px;max-width:90vw;">
-    <h2>Switch Cashier</h2>
+    <h2 data-i18n="switchCashier">Switch Cashier</h2>
     <div id="cashierList" style="margin-bottom:12px;"></div>
-    <p class="hint">Manage cashiers in Settings.</p>
+    <p class="hint" data-i18n="manageCashiersInSettings">Manage cashiers in Settings.</p>
     <div class="modal-actions">
-      <button class="btn secondary" id="closeCashierModalBtn">Close</button>
+      <button class="btn secondary" id="closeCashierModalBtn" data-i18n="close">Close</button>
     </div>
   </div>
 </div>
 
 <div id="customerPaymentModal">
   <div class="panel" style="width:380px;max-width:90vw;">
-    <h2 id="customerPaymentModalTitle">Log Payment</h2>
+    <h2 id="customerPaymentModalTitle" data-i18n="logPayment">Log Payment</h2>
     <input type="hidden" id="cpCustomerId">
     <div class="grid grid-2">
-      <div><label>Amount Received *</label><input type="number" id="cpAmount" min="0.01" step="0.01" required></div>
-      <div><label>Date *</label><input type="date" id="cpDate" required></div>
+      <div><label data-i18n="amountReceivedRequired">Amount Received *</label><input type="number" id="cpAmount" min="0.01" step="0.01" required></div>
+      <div><label data-i18n="dateRequired">Date *</label><input type="date" id="cpDate" required></div>
     </div>
-    <div style="margin-top:10px;"><label>Notes</label><input id="cpNotes" placeholder="Optional"></div>
+    <div style="margin-top:10px;"><label data-i18n="notes">Notes</label><input id="cpNotes" placeholder="Optional"></div>
     <div class="modal-actions">
-      <button class="btn" id="cpSaveBtn">Save Payment</button>
-      <button class="btn secondary" id="cpCancelBtn">Cancel</button>
+      <button class="btn" id="cpSaveBtn" data-i18n="savePayment">Save Payment</button>
+      <button class="btn secondary" id="cpCancelBtn" data-i18n="cancel">Cancel</button>
     </div>
   </div>
 </div>
 
 <div id="scanSheetModal">
   <div class="panel" style="width:720px;max-width:95vw;max-height:88vh;overflow-y:auto;">
-    <h2>Scan Inventory Sheet</h2>
-    <p class="hint">Photos of typed/printed lists work best. Nothing gets added to your inventory until you review it below and click Add.</p>
+    <h2 data-i18n="scanInventorySheet">Scan Inventory Sheet</h2>
+    <p class="hint" data-i18n="scanModalHint">Photos of typed/printed lists work best. Nothing gets added to your inventory until you review it below and click Add.</p>
 
     <input type="file" id="scanSheetFileInput" accept="image/*" capture="environment" style="display:none;">
-    <button class="btn" id="scanSheetChooseBtn">📷 Choose or Take Photo</button>
+    <button class="btn" id="scanSheetChooseBtn" data-i18n="chooseOrTakePhoto">📷 Choose or Take Photo</button>
     <div id="scanSheetPreviewBox" style="margin-top:10px;display:none;">
       <img id="scanSheetPreviewImg" src="" style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid var(--border);">
     </div>
@@ -939,104 +954,104 @@
 
     <div id="scanSheetStep2" style="display:none;margin-top:16px;">
       <div class="flex-between">
-        <h3 style="margin:0;">Review Detected Items</h3>
+        <h3 style="margin:0;" data-i18n="reviewDetectedItems">Review Detected Items</h3>
         <span class="hint" id="scanSheetRowCount"></span>
       </div>
-      <p class="hint">Untick anything you don't want, fix any misreads, then add.</p>
+      <p class="hint" data-i18n="untickHint">Untick anything you don't want, fix any misreads, then add.</p>
       <datalist id="scanCatList"></datalist>
       <div style="overflow-x:auto;">
         <table class="cart-table" id="scanSheetTable">
-          <thead><tr><th></th><th>Item Name</th><th>Category</th><th>Buying Price</th><th>Price</th><th>Stock</th><th>Unit</th><th>Expiry</th></tr></thead>
+          <thead><tr><th></th><th data-i18n="itemName">Item Name</th><th data-i18n="category">Category</th><th data-i18n="buyingPrice">Buying Price</th><th data-i18n="price">Price</th><th data-i18n="stock">Stock</th><th data-i18n="unit">Unit</th><th data-i18n="expiry">Expiry</th></tr></thead>
           <tbody id="scanSheetTbody"></tbody>
         </table>
       </div>
       <details style="margin-top:10px;">
-        <summary class="hint" style="cursor:pointer;">Show raw scanned text</summary>
+        <summary class="hint" style="cursor:pointer;" data-i18n="showRawScannedText">Show raw scanned text</summary>
         <textarea id="scanSheetRawText" readonly rows="6" style="margin-top:6px;font-family:'Courier New',monospace;font-size:12px;"></textarea>
       </details>
     </div>
 
     <div class="modal-actions">
-      <button class="btn secondary" id="scanSheetCancelBtn">Cancel</button>
-      <button class="btn" id="scanSheetAddBtn" style="display:none;">Add Items</button>
+      <button class="btn secondary" id="scanSheetCancelBtn" data-i18n="cancel">Cancel</button>
+      <button class="btn" id="scanSheetAddBtn" style="display:none;" data-i18n="addItems">Add Items</button>
     </div>
   </div>
 </div>
 
 <div id="heldSalesModal">
   <div class="panel" style="width:420px;max-width:90vw;max-height:80vh;overflow-y:auto;">
-    <h2>Held Sales</h2>
+    <h2 data-i18n="heldSales">Held Sales</h2>
     <div id="heldSalesList"></div>
-    <div id="heldSalesEmpty" class="empty" style="display:none;">No held sales right now.</div>
+    <div id="heldSalesEmpty" class="empty" style="display:none;" data-i18n="noHeldSales">No held sales right now.</div>
     <div class="modal-actions">
-      <button class="btn secondary" id="closeHeldModalBtn">Close</button>
+      <button class="btn secondary" id="closeHeldModalBtn" data-i18n="close">Close</button>
     </div>
   </div>
 </div>
 
 <div id="refundModal">
   <div class="panel" style="width:480px;max-width:92vw;max-height:85vh;overflow-y:auto;">
-    <h2>Process Refund — <span id="refundReceiptLabel"></span></h2>
+    <h2><span data-i18n="processRefund">Process Refund</span> — <span id="refundReceiptLabel"></span></h2>
     <table style="margin-bottom:10px;">
-      <thead><tr><th>Item</th><th>Purchased</th><th>Already Refunded</th><th>Refund Qty</th></tr></thead>
+      <thead><tr><th data-i18n="item">Item</th><th data-i18n="purchased">Purchased</th><th data-i18n="alreadyRefunded">Already Refunded</th><th data-i18n="refundQty">Refund Qty</th></tr></thead>
       <tbody id="refundLinesBody"></tbody>
     </table>
     <div>
-      <label>Reason (optional)</label>
+      <label data-i18n="reasonOptional">Reason (optional)</label>
       <input id="refundReason" placeholder="e.g. damaged item, customer changed mind">
     </div>
     <div class="totals">
-      <div class="line grand"><span>Refund Total</span><span id="refundTotalDisplay">Rs 0.00</span></div>
+      <div class="line grand"><span data-i18n="refundTotal">Refund Total</span><span id="refundTotalDisplay">Rs 0.00</span></div>
     </div>
     <div class="modal-actions">
-      <button class="btn danger" id="confirmRefundBtn">Confirm Refund</button>
-      <button class="btn secondary" id="closeRefundModalBtn">Cancel</button>
+      <button class="btn danger" id="confirmRefundBtn" data-i18n="confirmRefund">Confirm Refund</button>
+      <button class="btn secondary" id="closeRefundModalBtn" data-i18n="cancel">Cancel</button>
     </div>
   </div>
 </div>
 
 <div id="labelModal">
   <div class="panel" style="width:360px;max-width:90vw;">
-    <h2>Print Barcode Label</h2>
+    <h2 data-i18n="printBarcodeLabel">Print Barcode Label</h2>
     <div id="labelPreviewBox" style="text-align:center;background:#fff;padding:10px;border-radius:6px;"></div>
     <div style="margin-top:10px;">
-      <label>Number of Copies</label>
+      <label data-i18n="numberOfCopies">Number of Copies</label>
       <input type="number" id="labelCopies" min="1" value="1">
     </div>
     <div class="modal-actions">
-      <button class="btn" id="printLabelBtn">Print</button>
-      <button class="btn secondary" id="closeLabelModalBtn">Close</button>
+      <button class="btn" id="printLabelBtn" data-i18n="print">Print</button>
+      <button class="btn secondary" id="closeLabelModalBtn" data-i18n="close">Close</button>
     </div>
   </div>
 </div>
 
 <div id="shiftCloseModal">
   <div class="panel" style="width:440px;max-width:92vw;max-height:85vh;overflow-y:auto;">
-    <h2>Close Shift — <span id="shiftCloseCashier"></span></h2>
+    <h2><span data-i18n="closeShift">Close Shift</span> — <span id="shiftCloseCashier"></span></h2>
     <p class="hint" id="shiftCloseWindow"></p>
     <table style="margin-bottom:10px;">
       <tbody>
-        <tr><td>Opening Cash</td><td id="shiftOpeningCash"></td></tr>
-        <tr><td>Cash Sales</td><td id="shiftCashSales"></td></tr>
-        <tr><td>Card Sales</td><td id="shiftCardSales"></td></tr>
-        <tr><td>Mobile Wallet Sales</td><td id="shiftWalletSales"></td></tr>
-        <tr><td>Cash Refunds</td><td id="shiftCashRefunds"></td></tr>
-        <tr><td>Transactions</td><td id="shiftTxnCount"></td></tr>
-        <tr><td><strong>Expected Cash in Drawer</strong></td><td id="shiftExpectedCash"><strong></strong></td></tr>
+        <tr><td data-i18n="openingCash">Opening Cash</td><td id="shiftOpeningCash"></td></tr>
+        <tr><td data-i18n="cashSales">Cash Sales</td><td id="shiftCashSales"></td></tr>
+        <tr><td data-i18n="cardSales">Card Sales</td><td id="shiftCardSales"></td></tr>
+        <tr><td data-i18n="mobileWalletSales">Mobile Wallet Sales</td><td id="shiftWalletSales"></td></tr>
+        <tr><td data-i18n="cashRefunds">Cash Refunds</td><td id="shiftCashRefunds"></td></tr>
+        <tr><td data-i18n="transactions">Transactions</td><td id="shiftTxnCount"></td></tr>
+        <tr><td><strong data-i18n="expectedCashInDrawer">Expected Cash in Drawer</strong></td><td id="shiftExpectedCash"><strong></strong></td></tr>
       </tbody>
     </table>
     <div>
-      <label>Actual Cash Counted *</label>
+      <label data-i18n="actualCashCountedRequired">Actual Cash Counted *</label>
       <input type="number" id="shiftActualCash" min="0" step="0.01" placeholder="0.00">
     </div>
     <div id="shiftDifferenceBox" style="margin-top:8px;font-size:14px;font-weight:bold;"></div>
     <div style="margin-top:10px;">
-      <label>Notes (optional)</label>
+      <label data-i18n="notesOptional">Notes (optional)</label>
       <input id="shiftNotes" placeholder="e.g. drawer short due to change given for large bill">
     </div>
     <div class="modal-actions">
-      <button class="btn danger" id="confirmCloseShiftBtn">Confirm &amp; Close Shift</button>
-      <button class="btn secondary" id="closeShiftModalBtn">Cancel</button>
+      <button class="btn danger" id="confirmCloseShiftBtn" data-i18n="confirmCloseShift">Confirm &amp; Close Shift</button>
+      <button class="btn secondary" id="closeShiftModalBtn" data-i18n="cancel">Cancel</button>
     </div>
   </div>
 </div>
@@ -1156,7 +1171,9 @@
     defaultLowStock: 5,
     receiptFooter: "Thank you for shopping with us!",
     receiptWidth: "80mm",
-    darkMode: false
+    darkMode: false,
+    language: "en",
+    fontSize: "normal"
   };
 
   // Starts empty every time — there is no local cache to fall back on.
@@ -1611,6 +1628,8 @@
 
   function refreshEverything(){
     applyTheme();
+    applyFontSize();
+    applyLanguage();
     document.getElementById("sbStoreName").textContent = state.settings.storeName;
     document.getElementById("discountInput").value = state.settings.defaultDiscount;
     document.getElementById("taxInput").value = state.settings.defaultTax;
@@ -1657,17 +1676,175 @@
     document.documentElement.setAttribute("data-theme", state.settings.darkMode ? "dark" : "light");
   }
 
+  var FONT_SIZE_SCALE = { small: 0.9, normal: 1, large: 1.15, xlarge: 1.3 };
+  function applyFontSize(){
+    var scale = FONT_SIZE_SCALE[state.settings.fontSize] || 1;
+    document.body.style.zoom = scale;
+  }
+
+  // ================= LANGUAGE (English / Urdu) =================
+  // Static UI chrome only (nav, headings, labels, buttons, table headers,
+  // badges) — item/customer/category names, toasts, and printed receipts
+  // stay in whatever the shopkeeper actually typed, since those are real
+  // data, not translatable UI strings.
+  var I18N_UR = {
+    urduToggle: "اردو / Urdu", localDataNote: "تمام ڈیٹا اس براؤزر میں محفوظ ہے۔",
+    posSubtitle: "پوائنٹ آف سیل",
+    navDashboard: "ڈیش بورڈ", navBilling: "بلنگ", navInventory: "انوینٹری", navItemDatabase: "آئٹم ڈیٹا بیس",
+    navPurchases: "خریداری", navCustomers: "گاہک (ادھار)", navSales: "فروخت کی تاریخ", navFinancials: "مالیات", navSettings: "سیٹنگز",
+    dashboardSub: "آپ کی دکان کی کارکردگی کا خلاصہ", billingSub: "آئٹم اسکین یا تلاش کر کے سیل بنائیں",
+    inventorySub: "آئٹمز اور کیٹیگریز کا انتظام کریں", itemCatalogSub: "پہلے سے بنی پروڈکٹ فہرست — اسٹاک کرتے وقت انوینٹری میں شامل کریں",
+    purchasesSub: "سپلائرز اور اسٹاک ان کے ریکارڈ، رسید کے ساتھ", customersSub: "گاہکوں کے ادھار بیلنس اور ادائیگیاں دیکھیں",
+    salesSub: "پرانی رسیدیں دیکھیں اور دوبارہ پرنٹ کریں", financialsSub: "آمدنی بمقابلہ اخراجات، اور خالص منافع",
+    settingsSub: "دکان کی معلومات، ڈیفالٹس، اور ڈیٹا کا انتظام",
+    today: "آج", thisWeek: "اس ہفتے", thisMonth: "اس مہینے", allTime: "تمام وقت", customRange: "اپنی مرضی کی مدت",
+    downloadDailyReport: "📄 روزانہ رپورٹ ڈاؤن لوڈ کریں (PDF)", from: "سے", to: "تک", apply: "لاگو کریں",
+    revenue: "آمدنی", sales: "فروخت", lowStockItems: "کم اسٹاک آئٹمز", outOfStock: "ختم شدہ اسٹاک",
+    inventoryOverview: "انوینٹری کا جائزہ", totalItems: "کل آئٹمز", totalCategories: "کل کیٹیگریز", itemsWithoutBarcode: "بغیر بارکوڈ آئٹمز",
+    nearExpiry: "میعاد ختم ہونے کے قریب", nearExpiryHint: "14 دن میں میعاد ختم ہونے والے آئٹمز، قریب ترین پہلے۔",
+    item: "آئٹم", stock: "اسٹاک", expiryDate: "میعاد ختم ہونے کی تاریخ", status: "صورتحال", nothingExpiring: "جلد میعاد ختم ہونے والا کچھ نہیں۔",
+    reorderList: "دوبارہ آرڈر کی فہرست", reorderHint: "وہ آئٹمز جو کم اسٹاک کی حد پر یا اس سے نیچے ہیں۔",
+    currentStock: "موجودہ اسٹاک", lowStockThreshold: "کم اسٹاک کی حد", nothingToRestock: "فی الحال کچھ دوبارہ اسٹاک کرنے کی ضرورت نہیں۔",
+    topSellingItems: "زیادہ فروخت ہونے والے آئٹمز", qtySold: "فروخت شدہ مقدار", revenue2: "آمدنی", noSalesRange: "اس مدت میں کوئی فروخت نہیں۔",
+    recentSales: "حالیہ فروخت", receiptHash: "رسید نمبر", dateTime: "تاریخ/وقت", customer: "گاہک", total: "کل",
+    cashierActivityLog: "کیشیئر کی سرگرمی کا لاگ", cashierActivityHint: "ہر کیشیئر کب لاگ ان اور لاگ آؤٹ ہوا۔",
+    cashier: "کیشیئر", loggedOn: "لاگ ان وقت", loggedOff: "لاگ آؤٹ وقت", duration: "دورانیہ", cashDiff: "نقدی کا فرق", noCashierActivity: "ابھی تک کوئی کیشیئر سرگرمی نہیں۔",
+    scanOrSearchItem: "آئٹم اسکین یا تلاش کریں", scanBarcodePlaceholder: "بارکوڈ اسکین کریں، یا آئٹم کا نام لکھیں...",
+    add: "شامل کریں", scan: "📷 اسکین", cart: "کارٹ", heldSales: "روکی گئی سیلز", holdSale: "سیل روکیں", clearCart: "کارٹ خالی کریں",
+    price: "قیمت", qty: "مقدار", subtotal: "ذیلی کل", cartEmpty: "کارٹ خالی ہے — شروع کرنے کے لیے کوئی آئٹم اسکین یا تلاش کریں",
+    checkout: "چیک آؤٹ", discountPct: "رعایت (%)", taxPct: "ٹیکس (%)", discount: "رعایت", tax: "ٹیکس",
+    customerNameOptional: "گاہک کا نام (اختیاری)", walkInCustomer: "عام گاہک", paymentMethod: "ادائیگی کا طریقہ",
+    cash: "نقد", card: "کارڈ", mobileWallet: "موبائل والیٹ", creditUdhaar: "ادھار", customerRequired: "گاہک *",
+    cashReceived: "موصول شدہ نقدی", completeSale: "سیل مکمل کریں اور رسید پرنٹ کریں",
+    manageCategories: "کیٹیگریز کا انتظام کریں", newCategoryName: "نئی کیٹیگری کا نام", addCategory: "کیٹیگری شامل کریں",
+    scanInventorySheet: "انوینٹری شیٹ اسکین کریں", scanInventorySheetHint: "پرنٹ شدہ فہرست کی تصویر لیں یا اپلوڈ کریں — شامل کرنے سے پہلے آپ سب کچھ چیک اور درست کر سکیں گے۔",
+    scanAPage: "📷 صفحہ اسکین کریں", addNewItem: "نیا آئٹم شامل کریں", itemNameRequired: "آئٹم کا نام *",
+    barcodeOptional: "بارکوڈ (اگر نہیں تو خالی چھوڑیں)", camera: "📷 کیمرہ", categoryRequired: "کیٹیگری *",
+    buyingPriceRequired: "خریداری قیمت (فی یونٹ) *", priceRequired: "قیمت *", stockQtyRequired: "اسٹاک مقدار *", unit: "یونٹ",
+    lowStockAlertBelow: "کم اسٹاک الرٹ نیچے", expiryDateOptional: "میعاد ختم ہونے کی تاریخ (اختیاری)",
+    addItem: "آئٹم شامل کریں", cancelEdit: "ترمیم منسوخ کریں", inventory: "انوینٹری", items: "آئٹمز",
+    groupByCategoryOn: "کیٹیگری کے لحاظ سے گروپ: آن", groupByCategory: "کیٹیگری کے لحاظ سے گروپ", on: "آن", off: "آف",
+    searchByNameBarcodeCategory: "نام، بارکوڈ، یا کیٹیگری سے تلاش کریں...", allCategories: "تمام کیٹیگریز",
+    allStockLevels: "تمام اسٹاک لیول", lowStock: "کم اسٹاک", outOfStock2: "ختم شدہ اسٹاک", noBarcodeOnly: "صرف بغیر بارکوڈ",
+    noItemsYet: "ابھی تک کوئی آئٹم نہیں — اوپر پہلا آئٹم شامل کریں۔",
+    itemDatabase: "آئٹم ڈیٹا بیس", itemDatabaseHint: 'یہ لائیو انوینٹری نہیں ہے — اسٹاک کرتے وقت آئٹم پر "انوینٹری میں شامل کریں" استعمال کریں۔',
+    searchByNameBarcodeCategoryBrand: "نام، بارکوڈ، کیٹیگری، یا برانڈ سے تلاش کریں...", allBrands: "تمام برانڈز",
+    name: "نام", barcode: "بارکوڈ", category: "کیٹیگری", brand: "برانڈ", suggestedBuyingPrice: "تجویز کردہ خریداری قیمت",
+    noCatalogMatch: "آپ کی تلاش سے کوئی آئٹم میل نہیں کھاتا۔", previousPage: "← پچھلا صفحہ", nextPage: "اگلا صفحہ →",
+    suppliers: "سپلائرز", suppliersHint: "اپنے سپلائرز کا ریکارڈ رکھیں۔", supplierNameRequired: "سپلائر کا نام *",
+    contactPhone: "رابطہ فون", addressNotes: "پتہ / نوٹس", addSupplier: "سپلائر شامل کریں",
+    recordPurchase: "خریداری ریکارڈ کریں (اسٹاک ان)", supplierRequired: "سپلائر *", itemRequired: "آئٹم *",
+    typeToSearchItems: "آئٹمز تلاش کرنے کے لیے لکھیں...", purchaseDateRequired: "خریداری کی تاریخ *",
+    qtyPurchasedRequired: "خریدی گئی مقدار *", costPerUnitRequired: "فی یونٹ لاگت *", proofOfPurchase: "خریداری کا ثبوت (رسید / انوائس تصویر)",
+    remove: "ہٹائیں", notes: "نوٹس", addQtyToStockAuto: "یہ مقدار خودکار طور پر موجودہ اسٹاک میں شامل کریں",
+    recordPurchaseBtn: "خریداری ریکارڈ کریں", purchaseHistory: "خریداری کی تاریخ", date: "تاریخ", supplier: "سپلائر",
+    costPerUnit: "فی یونٹ لاگت", proof: "ثبوت", noPurchasesYet: "ابھی تک کوئی خریداری ریکارڈ نہیں ہوئی۔",
+    addCustomer: "گاہک شامل کریں", nameRequired: "نام *", phone: "فون",
+    customers: "گاہک", totalOutstanding: "کل بقایا:", searchByNamePhone: "نام یا فون سے تلاش کریں...",
+    balanceOwed: "بقایا رقم", noCustomersYet: "ابھی تک کوئی گاہک نہیں — اوپر پہلا گاہک شامل کریں۔",
+    salesHistory: "فروخت کی تاریخ", clearHistory: "تاریخ صاف کریں", searchByReceiptCustomer: "رسید نمبر یا گاہک سے تلاش کریں...",
+    cashier2: "کیشیئر", payment: "ادائیگی",
+    moneyInVsOut: "آمدنی بمقابلہ اخراجات", moneyInSalesRevenue: "آمدنی (فروخت)", moneyOutPurchasesExpenses: "اخراجات (خریداری + دیگر)",
+    netProfitLoss: "خالص منافع / نقصان", moneyOutBreaksDown: "اخراجات کی تفصیل: اسٹاک خریداری", otherExpenses: "دیگر اخراجات",
+    logExpense: "خرچہ درج کریں", logExpenseHint: "کرایہ، بجلی، تنخواہیں، اور دیگر اخراجات کے لیے جو اسٹاک خریداری نہیں ہیں۔",
+    monthPeriodRequired: "مہینہ (یہ کس مدت کے لیے ہے) *", datePaidRequired: "ادائیگی کی تاریخ *", amountRequired: "رقم *",
+    rent: "کرایہ", utilities: "بجلی/پانی", salaries: "تنخواہیں", transport: "آمد و رفت", maintenance: "مرمت",
+    miscellaneous: "متفرق", other: "دیگر", logExpenseBtn: "خرچہ درج کریں", expensesThisRange: "اخراجات (اس مدت میں)",
+    noExpensesRange: "اس مدت میں کوئی خرچہ درج نہیں ہوا۔",
+    storeInformation: "دکان کی معلومات", storeName: "دکان کا نام", phoneNumber: "فون نمبر", address: "پتہ",
+    billingDefaults: "بلنگ ڈیفالٹس", currencySymbol: "کرنسی کی علامت", defaultTax: "ڈیفالٹ ٹیکس (%)",
+    defaultDiscount: "ڈیفالٹ رعایت (%)", defaultLowStockThreshold: "ڈیفالٹ کم اسٹاک کی حد",
+    receipt: "رسید", receiptFooterMessage: "رسید کا فوٹر پیغام", printerPaperWidth: "پرنٹر کاغذ کی چوڑائی",
+    printer58: "58mm تھرمل رسید پرنٹر", printer80: "80mm تھرمل رسید پرنٹر", printerA4: "معیاری کاغذ (A4 / لیٹر)",
+    printerHint: "اسے اپنے پرنٹر سے میچ کریں تاکہ رسیدیں درست پرنٹ ہوں۔ اگر یقین نہ ہو تو زیادہ تر چھوٹے پرنٹر 80mm ہوتے ہیں۔",
+    appearance: "ظاہری شکل", darkMode: "ڈارک موڈ", saveSettings: "سیٹنگز محفوظ کریں", savedCheck: "محفوظ ✓",
+    fontSize: "فونٹ کا سائز", fontSmall: "چھوٹا", fontNormal: "درمیانہ", fontLarge: "بڑا", fontExtraLarge: "بہت بڑا",
+    cashiers: "کیشیئرز", cashiersHint: "ہر سیل کس نے کی، اس کا ریکارڈ رکھیں۔ پن اختیاری ہے۔",
+    cashierNameRequired: "کیشیئر کا نام *", pinOptional: "پن (اختیاری)", addCashier: "کیشیئر شامل کریں",
+    shiftHistory: "شفٹ کی تاریخ", closed: "بند ہوئی", expected: "متوقع", counted: "شمار شدہ", difference: "فرق",
+    noShiftsClosed: "ابھی تک کوئی شفٹ بند نہیں ہوئی۔",
+    dataManagement: "ڈیٹا کا انتظام", dataManagementHint: "مکمل بیک اپ ایکسپورٹ کریں یا پرانی بیک اپ فائل سے بحال کریں۔",
+    exportBackup: "بیک اپ ایکسپورٹ کریں (.json)", importBackup: "بیک اپ درآمد کریں",
+    print: "پرنٹ", close: "بند کریں", switchCashier: "کیشیئر تبدیل کریں", manageCashiersInSettings: "سیٹنگز میں کیشیئرز کا انتظام کریں۔",
+    logPayment: "ادائیگی درج کریں", amountReceivedRequired: "موصول شدہ رقم *", dateRequired: "تاریخ *",
+    savePayment: "ادائیگی محفوظ کریں", cancel: "منسوخ کریں",
+    scanModalHint: "ٹائپ شدہ/پرنٹ شدہ فہرستوں کی تصاویر بہترین کام کرتی ہیں۔ شامل کرنے سے پہلے نیچے جائزہ لیں۔",
+    chooseOrTakePhoto: "📷 تصویر منتخب کریں یا لیں", reviewDetectedItems: "معلوم شدہ آئٹمز کا جائزہ لیں",
+    untickHint: "جو نہیں چاہیے اسے ان چیک کریں، غلطیاں درست کریں، پھر شامل کریں۔",
+    itemName: "آئٹم کا نام", buyingPrice: "خریداری قیمت", expiry: "میعاد ختم", showRawScannedText: "خام اسکین شدہ متن دکھائیں",
+    addItems: "آئٹمز شامل کریں", heldSales2: "روکی گئی سیلز", noHeldSales: "فی الحال کوئی روکی گئی سیل نہیں۔",
+    processRefund: "رقم واپسی کریں", purchased: "خریدا گیا", alreadyRefunded: "پہلے سے واپس", refundQty: "واپسی مقدار",
+    reasonOptional: "وجہ (اختیاری)", refundTotal: "کل واپسی", confirmRefund: "واپسی کی تصدیق کریں",
+    printBarcodeLabel: "بارکوڈ لیبل پرنٹ کریں", numberOfCopies: "کاپیوں کی تعداد",
+    closeShift: "شفٹ بند کریں", openingCash: "شروعاتی نقدی", cashSales: "نقد فروخت", cardSales: "کارڈ فروخت",
+    mobileWalletSales: "موبائل والیٹ فروخت", cashRefunds: "نقد واپسیاں", transactions: "لین دین",
+    expectedCashInDrawer: "خانے میں متوقع نقدی", actualCashCountedRequired: "شمار شدہ اصل نقدی *",
+    notesOptional: "نوٹس (اختیاری)", confirmCloseShift: "تصدیق کریں اور شفٹ بند کریں",
+    edit: "ترمیم", delete: "حذف کریں", label: "لیبل", resume: "دوبارہ شروع کریں", receiptBtn: "رسید",
+    monthReceipt: "ماہانہ رسید", refund: "واپسی",
+    editItem: "آئٹم میں ترمیم", saveChanges: "تبدیلیاں محفوظ کریں", editCustomer: "گاہک میں ترمیم",
+    selectCustomer: "گاہک منتخب کریں...", owes: "بقایا ہے",
+    noBarcode: "بغیر بارکوڈ", inStock: "دستیاب اسٹاک", expired: "میعاد ختم", dSuffix: "دن",
+    expiredAgo: "میعاد ختم ہوئے", daysAgo: "دن پہلے", expiresToday: "آج میعاد ختم", daysLeft: "دن باقی",
+    receipt2: "رسید"
+  };
+
+  function t(key, fallbackEn){
+    var lang = state.settings.language || "en";
+    if(lang === "ur" && I18N_UR[key]) return I18N_UR[key];
+    return fallbackEn !== undefined ? fallbackEn : key;
+  }
+
+  var i18nOriginals = new WeakMap();
+  function applyLanguage(){
+    var lang = state.settings.language || "en";
+    document.documentElement.setAttribute("lang", lang === "ur" ? "ur" : "en");
+    document.getElementById("langToggle").checked = (lang === "ur");
+    document.querySelectorAll("[data-i18n]").forEach(function(el){
+      var key = el.dataset.i18n;
+      if(!i18nOriginals.has(el)) i18nOriginals.set(el, { text: el.textContent });
+      var orig = i18nOriginals.get(el);
+      el.textContent = (lang === "ur" && I18N_UR[key]) ? I18N_UR[key] : orig.text;
+    });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach(function(el){
+      var key = el.dataset.i18nPlaceholder;
+      if(!i18nOriginals.has(el)) i18nOriginals.set(el, { placeholder: el.placeholder });
+      var orig = i18nOriginals.get(el);
+      el.placeholder = (lang === "ur" && I18N_UR[key]) ? I18N_UR[key] : orig.placeholder;
+    });
+    // Re-render dynamic (JS-templated) pieces so their translated strings refresh too.
+    renderDashboard();
+    renderInventory();
+    renderCustomers();
+    renderFinancials();
+    renderPurchaseTable();
+    var activeBtn = document.querySelector(".nav-btn.active");
+    if(activeBtn){
+      var meta = VIEW_META[activeBtn.dataset.view];
+      if(meta){
+        document.getElementById("viewTitle").textContent = t(meta.titleKey, meta.title);
+        document.getElementById("viewSubtitle").textContent = t(meta.subKey, meta.sub);
+      }
+    }
+  }
+
+  document.getElementById("langToggle").addEventListener("change", function(){
+    state.settings.language = this.checked ? "ur" : "en";
+    saveSettings();
+    applyLanguage();
+  });
+
   // ---------- Navigation ----------
   var VIEW_META = {
-    dashboard: { title: "Dashboard", sub: "Overview of your store's performance" },
-    billing: { title: "Billing", sub: "Scan or search items to build a sale" },
-    inventory: { title: "Inventory", sub: "Manage items and categories" },
-    itemCatalog: { title: "Item Database", sub: "Premade product catalog — add items into your live Inventory as you stock them" },
-    purchases: { title: "Purchases", sub: "Track suppliers and stock-in records with proof of purchase" },
-    customers: { title: "Customers (Udhaar)", sub: "Track customer credit balances and payments" },
-    sales: { title: "Sales History", sub: "Browse and reprint past receipts" },
-    financials: { title: "Financials", sub: "Money in vs money out, and your net profit" },
-    settings: { title: "Settings", sub: "Store info, defaults, and data management" }
+    dashboard: { title: "Dashboard", sub: "Overview of your store's performance", titleKey: "navDashboard", subKey: "dashboardSub" },
+    billing: { title: "Billing", sub: "Scan or search items to build a sale", titleKey: "navBilling", subKey: "billingSub" },
+    inventory: { title: "Inventory", sub: "Manage items and categories", titleKey: "navInventory", subKey: "inventorySub" },
+    itemCatalog: { title: "Item Database", sub: "Premade product catalog — add items into your live Inventory as you stock them", titleKey: "navItemDatabase", subKey: "itemCatalogSub" },
+    purchases: { title: "Purchases", sub: "Track suppliers and stock-in records with proof of purchase", titleKey: "navPurchases", subKey: "purchasesSub" },
+    customers: { title: "Customers (Udhaar)", sub: "Track customer credit balances and payments", titleKey: "navCustomers", subKey: "customersSub" },
+    sales: { title: "Sales History", sub: "Browse and reprint past receipts", titleKey: "navSales", subKey: "salesSub" },
+    financials: { title: "Financials", sub: "Money in vs money out, and your net profit", titleKey: "navFinancials", subKey: "financialsSub" },
+    settings: { title: "Settings", sub: "Store info, defaults, and data management", titleKey: "navSettings", subKey: "settingsSub" }
   };
 
   var navBtns = document.querySelectorAll(".nav-btn");
@@ -1678,8 +1855,8 @@
       document.querySelectorAll(".view").forEach(function(v){ v.classList.remove("active"); });
       document.getElementById("view-" + btn.dataset.view).classList.add("active");
       var meta = VIEW_META[btn.dataset.view];
-      document.getElementById("viewTitle").textContent = meta.title;
-      document.getElementById("viewSubtitle").textContent = meta.sub;
+      document.getElementById("viewTitle").textContent = t(meta.titleKey, meta.title);
+      document.getElementById("viewSubtitle").textContent = t(meta.subKey, meta.sub);
       if(btn.dataset.view === "inventory") renderInventory();
       if(btn.dataset.view === "itemCatalog") renderItemCatalog();
       if(btn.dataset.view === "purchases") renderPurchasesView();
@@ -1783,7 +1960,7 @@
 
     var filterSelect = document.getElementById("invCatFilter");
     var currentFilter = filterSelect.value;
-    filterSelect.innerHTML = '<option value="all">All categories</option>' +
+    filterSelect.innerHTML = '<option value="all">' + t("allCategories", "All categories") + '</option>' +
       state.categories.map(function(c){ return '<option value="'+escapeHtml(c)+'">'+escapeHtml(c)+'</option>'; }).join("");
     filterSelect.value = state.categories.indexOf(currentFilter) !== -1 ? currentFilter : "all";
   }
@@ -1885,8 +2062,8 @@
     document.getElementById("itemUnit").value = "pcs";
     document.getElementById("itemLowStock").value = state.settings.defaultLowStock;
     document.getElementById("itemExpiry").value = "";
-    document.getElementById("invFormTitle").textContent = "Add New Item";
-    document.getElementById("invSaveBtn").textContent = "Add Item";
+    document.getElementById("invFormTitle").textContent = t("addNewItem", "Add New Item");
+    document.getElementById("invSaveBtn").textContent = t("addItem", "Add Item");
     invCancelBtn.style.display = "none";
   }
 
@@ -2043,8 +2220,8 @@
     document.getElementById("itemUnit").value = item.unit || "pcs";
     document.getElementById("itemLowStock").value = item.lowStock || 0;
     document.getElementById("itemExpiry").value = item.expiry || "";
-    document.getElementById("invFormTitle").textContent = "Edit Item: " + item.name;
-    document.getElementById("invSaveBtn").textContent = "Save Changes";
+    document.getElementById("invFormTitle").textContent = t("editItem", "Edit Item") + ": " + item.name;
+    document.getElementById("invSaveBtn").textContent = t("saveChanges", "Save Changes");
     invCancelBtn.style.display = "inline-block";
     window.scrollTo({top:0, behavior:"smooth"});
   }
@@ -2064,14 +2241,14 @@
   document.getElementById("invCatFilter").addEventListener("change", renderInventory);
   document.getElementById("toggleGroupBtn").addEventListener("click", function(){
     groupByCategory = !groupByCategory;
-    this.textContent = "Group by Category: " + (groupByCategory ? "On" : "Off");
+    this.textContent = t("groupByCategory", "Group by Category") + ": " + (groupByCategory ? t("on", "On") : t("off", "Off"));
     renderInventory();
   });
 
   function stockBadge(item){
-    if(item.stock <= 0) return '<span class="badge out">Out of stock</span>';
-    if(item.stock <= (item.lowStock||0)) return '<span class="badge low">Low stock</span>';
-    return '<span class="badge ok">In stock</span>';
+    if(item.stock <= 0) return '<span class="badge out">' + t("outOfStock2", "Out of stock") + '</span>';
+    if(item.stock <= (item.lowStock||0)) return '<span class="badge low">' + t("lowStock", "Low stock") + '</span>';
+    return '<span class="badge ok">' + t("inStock", "In stock") + '</span>';
   }
 
   function daysUntil(dateStr){
@@ -2083,23 +2260,23 @@
     if(!it.expiry) return '<span style="color:var(--muted);">—</span>';
     var days = daysUntil(it.expiry);
     var label = it.expiry;
-    if(days < 0) return '<span class="badge out">' + label + ' (expired)</span>';
-    if(days <= 14) return '<span class="badge low">' + label + ' (' + days + 'd)</span>';
+    if(days < 0) return '<span class="badge out">' + label + ' (' + t("expired", "expired") + ')</span>';
+    if(days <= 14) return '<span class="badge low">' + label + ' (' + days + t("dSuffix", "d") + ')</span>';
     return label;
   }
 
   function itemRow(it){
     return "<tr>" +
       "<td>" + escapeHtml(it.name) + "</td>" +
-      "<td>" + (it.barcode ? escapeHtml(it.barcode) : '<span class="badge nobar">No barcode</span>') + "</td>" +
+      "<td>" + (it.barcode ? escapeHtml(it.barcode) : '<span class="badge nobar">' + t("noBarcode", "No barcode") + '</span>') + "</td>" +
       "<td>" + money(it.price) + "</td>" +
       "<td>" + it.stock + " " + escapeHtml(it.unit||"") + "</td>" +
       "<td>" + stockBadge(it) + "</td>" +
       "<td>" + expiryCell(it) + "</td>" +
       "<td>" +
-        '<button class="btn secondary small" onclick="POS.editItem(\''+it.id+'\')">Edit</button> ' +
-        '<button class="btn secondary small" onclick="POS.openLabelModal(\''+it.id+'\')">🏷️ Label</button> ' +
-        '<button class="btn danger small" onclick="POS.deleteItem(\''+it.id+'\')">Delete</button>' +
+        '<button class="btn secondary small" onclick="POS.editItem(\''+it.id+'\')">' + t("edit", "Edit") + '</button> ' +
+        '<button class="btn secondary small" onclick="POS.openLabelModal(\''+it.id+'\')">🏷️ ' + t("label", "Label") + '</button> ' +
+        '<button class="btn danger small" onclick="POS.deleteItem(\''+it.id+'\')">' + t("delete", "Delete") + '</button>' +
       "</td>" +
     "</tr>";
   }
@@ -2543,7 +2720,7 @@
         "<td>" + money(p.total) + "</td>" +
         "<td>" + (p.proof ? '<img class="proof-thumb" src="'+p.proof+'" onclick="POS.viewProof(\''+p.id+'\')">' : '<span class="hint">—</span>') + "</td>" +
         "<td>" + escapeHtml(p.notes||"") + "</td>" +
-        '<td><button class="btn danger small" onclick="POS.deletePurchase(\''+p.id+'\')">Delete</button></td>' +
+        '<td><button class="btn danger small" onclick="POS.deletePurchase(\''+p.id+'\')">' + t("delete", "Delete") + '</button></td>' +
       "</tr>";
     }).join("");
   }
@@ -2586,9 +2763,9 @@
         "<td>" + escapeHtml(c.notes||"") + "</td>" +
         "<td>" + (bal > 0 ? '<span class="badge low">' + money(bal) + '</span>' : money(bal)) + "</td>" +
         "<td>" +
-          '<button class="btn small" onclick="POS.openCustomerPaymentModal(\''+c.id+'\')">Log Payment</button> ' +
-          '<button class="btn secondary small" onclick="POS.editCustomer(\''+c.id+'\')">Edit</button> ' +
-          '<button class="btn danger small" onclick="POS.deleteCustomer(\''+c.id+'\')">Delete</button>' +
+          '<button class="btn small" onclick="POS.openCustomerPaymentModal(\''+c.id+'\')">' + t("logPayment", "Log Payment") + '</button> ' +
+          '<button class="btn secondary small" onclick="POS.editCustomer(\''+c.id+'\')">' + t("edit", "Edit") + '</button> ' +
+          '<button class="btn danger small" onclick="POS.deleteCustomer(\''+c.id+'\')">' + t("delete", "Delete") + '</button>' +
         "</td>" +
       "</tr>";
     }).join("");
@@ -2621,8 +2798,8 @@
   function resetCustomerForm(){
     document.getElementById("customerForm").reset();
     document.getElementById("customerId").value = "";
-    document.getElementById("customerFormTitle").textContent = "Add Customer";
-    document.getElementById("customerSaveBtn").textContent = "Add Customer";
+    document.getElementById("customerFormTitle").textContent = t("addCustomer", "Add Customer");
+    document.getElementById("customerSaveBtn").textContent = t("addCustomer", "Add Customer");
     document.getElementById("customerCancelBtn").style.display = "none";
   }
 
@@ -2633,8 +2810,8 @@
     document.getElementById("customerName2").value = c.name;
     document.getElementById("customerPhone").value = c.phone || "";
     document.getElementById("customerNotes").value = c.notes || "";
-    document.getElementById("customerFormTitle").textContent = "Edit Customer: " + c.name;
-    document.getElementById("customerSaveBtn").textContent = "Save Changes";
+    document.getElementById("customerFormTitle").textContent = t("editCustomer", "Edit Customer") + ": " + c.name;
+    document.getElementById("customerSaveBtn").textContent = t("saveChanges", "Save Changes");
     document.getElementById("customerCancelBtn").style.display = "inline-block";
     window.scrollTo({top:0, behavior:"smooth"});
   }
@@ -2655,7 +2832,7 @@
     var sel = document.getElementById("creditCustomerSelect");
     if(!sel) return;
     var current = sel.value;
-    sel.innerHTML = '<option value="">Select customer...</option>' +
+    sel.innerHTML = '<option value="">' + t("selectCustomer", "Select customer...") + '</option>' +
       state.customers.slice().sort(function(a,b){ return a.name.localeCompare(b.name); }).map(function(c){
         return '<option value="'+c.id+'">' + escapeHtml(c.name) + (c.phone ? " (" + escapeHtml(c.phone) + ")" : "") + '</option>';
       }).join("");
@@ -2670,7 +2847,7 @@
     var c = state.customers.find(function(x){ return x.id === customerId; });
     if(!c) return;
     document.getElementById("cpCustomerId").value = customerId;
-    document.getElementById("customerPaymentModalTitle").textContent = "Log Payment: " + c.name + " (owes " + money(customerBalance(c)) + ")";
+    document.getElementById("customerPaymentModalTitle").textContent = t("logPayment", "Log Payment") + ": " + c.name + " (" + t("owes", "owes") + " " + money(customerBalance(c)) + ")";
     document.getElementById("cpAmount").value = "";
     document.getElementById("cpDate").value = new Date().toISOString().slice(0,10);
     document.getElementById("cpNotes").value = "";
@@ -2723,7 +2900,7 @@
     var sel = document.getElementById("catalogCatFilter");
     var current = sel.value;
     var cats = Array.from(new Set(state.itemCatalog.map(function(it){ return it.category || "Uncategorized"; }))).sort();
-    sel.innerHTML = "<option value='all'>All categories</option>" +
+    sel.innerHTML = "<option value='all'>" + t("allCategories", "All categories") + "</option>" +
       cats.map(function(c){ return "<option value='" + escapeHtml(c) + "'>" + escapeHtml(c) + "</option>"; }).join("");
     if(cats.indexOf(current) !== -1) sel.value = current;
   }
@@ -2731,7 +2908,7 @@
     var sel = document.getElementById("catalogBrandFilter");
     var current = sel.value;
     var brands = Array.from(new Set(state.itemCatalog.map(function(it){ return it.brand || ""; }).filter(Boolean))).sort();
-    sel.innerHTML = "<option value='all'>All brands</option>" +
+    sel.innerHTML = "<option value='all'>" + t("allBrands", "All brands") + "</option>" +
       brands.map(function(b){ return "<option value='" + escapeHtml(b) + "'>" + escapeHtml(b) + "</option>"; }).join("");
     if(brands.indexOf(current) !== -1) sel.value = current;
   }
@@ -3173,8 +3350,8 @@
       return '<div class="held-row">' +
         '<span>' + (h.customer || "Walk-in customer") + ' · ' + itemCount + ' item(s) · ' + d.toLocaleTimeString() + '</span>' +
         '<span>' +
-          '<button class="btn small" onclick="POS.resumeHeldSale(\''+h.id+'\')">Resume</button> ' +
-          '<button class="btn danger small" onclick="POS.deleteHeldSale(\''+h.id+'\')">Delete</button>' +
+          '<button class="btn small" onclick="POS.resumeHeldSale(\''+h.id+'\')">' + t("resume", "Resume") + '</button> ' +
+          '<button class="btn danger small" onclick="POS.deleteHeldSale(\''+h.id+'\')">' + t("delete", "Delete") + '</button>' +
         '</span>' +
       '</div>';
     }).join("");
@@ -3887,15 +4064,15 @@
           "<td>" + escapeHtml(e.category||"—") + "</td>" +
           "<td>" + money(e.amount) + "</td>" +
           "<td>" + escapeHtml(e.notes||"") + "</td>" +
-          '<td><button class="btn secondary small" onclick="POS.showExpenseReceipt(\'' + e.id + '\')">Receipt</button> ' +
-          '<button class="btn danger small" onclick="POS.deleteExpense(\'' + e.id + '\')">Delete</button></td>' +
+          '<td><button class="btn secondary small" onclick="POS.showExpenseReceipt(\'' + e.id + '\')">' + t("receipt", "Receipt") + '</button> ' +
+          '<button class="btn danger small" onclick="POS.deleteExpense(\'' + e.id + '\')">' + t("delete", "Delete") + '</button></td>' +
         "</tr>";
       }).join("");
       return '<div class="panel" style="margin-bottom:14px;border:1px solid var(--border);">' +
         '<div class="flex-between" style="margin-bottom:8px;">' +
           '<h3 style="margin:0;">' + formatPeriodLabel(key) + '</h3>' +
           '<span style="font-size:13px;color:var(--muted);">' + rows.length + ' expense(s) · Total: ' + money(monthTotal) + ' ' +
-          '<button class="btn secondary small" onclick="POS.showMonthExpenseReceipt(\'' + key.replace(/'/g, "\\'") + '\')">Month Receipt</button></span>' +
+          '<button class="btn secondary small" onclick="POS.showMonthExpenseReceipt(\'' + key.replace(/'/g, "\\'") + '\')">' + t("monthReceipt", "Month Receipt") + '</button></span>' +
         '</div>' +
         '<table>' +
           '<thead><tr><th>Date Paid</th><th>Category</th><th>Amount</th><th>Notes</th><th></th></tr></thead>' +
@@ -4031,8 +4208,8 @@
         "<td>" + money(sale.grand) + "</td>" +
         "<td>" + sale.payment + "</td>" +
         "<td>" + statusBadge + "</td>" +
-        '<td><button class="btn secondary small" onclick="POS.viewReceipt(\''+sale.id+'\')">Receipt</button> ' +
-        (refundStatus === "full" ? "" : '<button class="btn danger small" onclick="POS.openRefundModal(\''+sale.id+'\')">Refund</button>') +
+        '<td><button class="btn secondary small" onclick="POS.viewReceipt(\''+sale.id+'\')">' + t("receipt", "Receipt") + '</button> ' +
+        (refundStatus === "full" ? "" : '<button class="btn danger small" onclick="POS.openRefundModal(\''+sale.id+'\')">' + t("refund", "Refund") + '</button>') +
         "</td>" +
       "</tr>";
     }).join("");
@@ -4234,8 +4411,8 @@
     empty.style.display = soon.length === 0 ? "block" : "none";
     body.innerHTML = soon.map(function(it){
       var days = daysUntil(it.expiry);
-      var status = days < 0 ? '<span class="badge out">Expired ' + Math.abs(days) + 'd ago</span>' :
-        (days === 0 ? '<span class="badge out">Expires today</span>' : '<span class="badge low">' + days + 'd left</span>');
+      var status = days < 0 ? '<span class="badge out">' + t("expiredAgo", "Expired") + ' ' + Math.abs(days) + t("daysAgo", "d ago") + '</span>' :
+        (days === 0 ? '<span class="badge out">' + t("expiresToday", "Expires today") + '</span>' : '<span class="badge low">' + days + t("daysLeft", "d left") + '</span>');
       return "<tr><td>" + escapeHtml(it.name) + "</td><td>" + it.stock + " " + escapeHtml(it.unit||"") + "</td><td>" + it.expiry + "</td><td>" + status + "</td></tr>";
     }).join("");
   }
@@ -4246,7 +4423,7 @@
     var empty = document.getElementById("reorderEmpty");
     empty.style.display = items.length === 0 ? "block" : "none";
     body.innerHTML = items.map(function(it){
-      var status = it.stock <= 0 ? '<span class="badge out">Out of stock</span>' : '<span class="badge low">Low stock</span>';
+      var status = it.stock <= 0 ? '<span class="badge out">' + t("outOfStock2", "Out of stock") + '</span>' : '<span class="badge low">' + t("lowStock", "Low stock") + '</span>';
       return "<tr><td>" + escapeHtml(it.name) + "</td><td>" + it.stock + " " + escapeHtml(it.unit||"") + "</td><td>" + (it.lowStock||0) + "</td><td>" + status + "</td></tr>";
     }).join("");
   }
@@ -4527,6 +4704,7 @@
     document.getElementById("setReceiptFooter").value = s.receiptFooter;
     document.getElementById("setReceiptWidth").value = s.receiptWidth || "80mm";
     document.getElementById("setDarkMode").checked = !!s.darkMode;
+    document.getElementById("setFontSize").value = s.fontSize || "normal";
 
     document.getElementById("setCloudUrl").value = state.cloud.url || "";
     document.getElementById("setCloudSecret").value = state.cloud.secret || "";
@@ -4547,8 +4725,10 @@
     state.settings.receiptFooter = document.getElementById("setReceiptFooter").value.trim();
     state.settings.receiptWidth = document.getElementById("setReceiptWidth").value;
     state.settings.darkMode = document.getElementById("setDarkMode").checked;
+    state.settings.fontSize = document.getElementById("setFontSize").value;
     saveSettings();
     applyTheme();
+    applyFontSize();
     document.getElementById("sbStoreName").textContent = state.settings.storeName;
     document.getElementById("discountInput").value = state.settings.defaultDiscount;
     document.getElementById("taxInput").value = state.settings.defaultTax;
@@ -4562,6 +4742,11 @@
   document.getElementById("setDarkMode").addEventListener("change", function(){
     state.settings.darkMode = this.checked;
     applyTheme();
+  });
+
+  document.getElementById("setFontSize").addEventListener("change", function(){
+    state.settings.fontSize = this.value;
+    applyFontSize();
   });
 
   // ---- Cloud Sync ----
