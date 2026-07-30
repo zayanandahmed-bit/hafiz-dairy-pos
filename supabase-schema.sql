@@ -98,11 +98,15 @@ create table if not exists purchases (
 -- Powers the Financials tab's Money In vs Money Out view.
 create table if not exists expenses (
   id text primary key,
-  date date,
+  date date, -- when it was actually entered/paid
+  period text default '', -- e.g. '2026-07' — which month this expense is FOR, may differ from date
   category text default '',
   amount numeric default 0,
   notes text default ''
 );
+
+-- Safe to re-run — no-op if the column already exists.
+alter table expenses add column if not exists period text default '';
 
 create table if not exists sales (
   id text primary key,
@@ -374,8 +378,8 @@ begin
 
   if payload ? 'expenses' then
     delete from expenses where true;
-    insert into expenses (id, date, category, amount, notes)
-    select x->>'id', nullif(x->>'date','')::date, coalesce(x->>'category',''),
+    insert into expenses (id, date, period, category, amount, notes)
+    select x->>'id', nullif(x->>'date','')::date, coalesce(x->>'period',''), coalesce(x->>'category',''),
            coalesce((x->>'amount')::numeric,0), coalesce(x->>'notes','')
     from jsonb_array_elements(payload->'expenses') x;
   end if;
@@ -510,7 +514,7 @@ begin
     )) from purchases), '[]'::jsonb),
 
     'expenses', coalesce((select jsonb_agg(jsonb_build_object(
-      'id', id, 'date', date, 'category', category, 'amount', amount, 'notes', notes
+      'id', id, 'date', date, 'period', period, 'category', category, 'amount', amount, 'notes', notes
     )) from expenses), '[]'::jsonb),
 
     'heldSales', coalesce((select jsonb_agg(
@@ -899,8 +903,8 @@ set search_path = public
 as $$
 begin
   delete from expenses where true;
-  insert into expenses (id, date, category, amount, notes)
-  select x->>'id', nullif(x->>'date','')::date, coalesce(x->>'category',''),
+  insert into expenses (id, date, period, category, amount, notes)
+  select x->>'id', nullif(x->>'date','')::date, coalesce(x->>'period',''), coalesce(x->>'category',''),
          coalesce((x->>'amount')::numeric,0), coalesce(x->>'notes','')
   from jsonb_array_elements(expenses) x;
 end;
