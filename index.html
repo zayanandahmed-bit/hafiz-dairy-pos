@@ -3590,7 +3590,8 @@
       return '<div class="panel" style="margin-bottom:14px;border:1px solid var(--border);">' +
         '<div class="flex-between" style="margin-bottom:8px;">' +
           '<h3 style="margin:0;">' + formatPeriodLabel(key) + '</h3>' +
-          '<span style="font-size:13px;color:var(--muted);">' + rows.length + ' expense(s) · Total: ' + money(monthTotal) + '</span>' +
+          '<span style="font-size:13px;color:var(--muted);">' + rows.length + ' expense(s) · Total: ' + money(monthTotal) + ' ' +
+          '<button class="btn secondary small" onclick="POS.showMonthExpenseReceipt(\'' + key.replace(/'/g, "\\'") + '\')">Month Receipt</button></span>' +
         '</div>' +
         '<table>' +
           '<thead><tr><th>Date Paid</th><th>Category</th><th>Amount</th><th>Notes</th><th></th></tr></thead>' +
@@ -3627,6 +3628,32 @@
     html += "<hr>";
     if(e.notes) html += '<div class="rline"><span>Notes</span><span>'+escapeHtml(e.notes)+'</span></div>';
     html += '<div style="text-align:center;">Business expense record</div>';
+
+    document.getElementById("receiptContent").innerHTML = html;
+    document.getElementById("receiptModal").classList.add("show");
+  }
+
+  function showMonthExpenseReceipt(period){
+    var rows = state.expenses.filter(function(e){ return (e.period || "—") === period; })
+      .sort(function(a,b){ return new Date(a.date) - new Date(b.date); });
+    if(rows.length === 0) return;
+    var total = rows.reduce(function(s,e){ return s + (e.amount||0); }, 0);
+
+    var html = "";
+    html += '<div style="text-align:center;font-weight:bold;font-size:14px;">MONTHLY EXPENSE REPORT</div>';
+    html += '<div style="text-align:center;">' + escapeHtml(state.settings.storeName || "") + '</div>';
+    html += "<hr>";
+    html += '<div class="rline"><span>Month</span><span>'+formatPeriodLabel(period)+'</span></div>';
+    html += '<div class="rline"><span>Expenses</span><span>'+rows.length+'</span></div>';
+    html += "<hr>";
+    rows.forEach(function(e){
+      html += '<div class="rline"><span>' + (e.date||"—") + " · " + escapeHtml(e.category||"—") + '</span><span>' + money(e.amount) + '</span></div>';
+      if(e.notes) html += '<div class="rline"><span style="padding-left:10px;">' + escapeHtml(e.notes) + '</span><span></span></div>';
+    });
+    html += "<hr>";
+    html += '<div class="rline" style="font-weight:bold;font-size:14px;"><span>TOTAL</span><span>'+money(total)+'</span></div>';
+    html += "<hr>";
+    html += '<div style="text-align:center;">Business expense summary for the month</div>';
 
     document.getElementById("receiptContent").innerHTML = html;
     document.getElementById("receiptModal").classList.add("show");
@@ -4443,6 +4470,7 @@
     addCatalogItemToInventory: addCatalogItemToInventory,
     deleteExpense: deleteExpense,
     showExpenseReceipt: showExpenseReceipt,
+    showMonthExpenseReceipt: showMonthExpenseReceipt,
     addToCart: addToCart,
     changeQty: changeQty,
     setQty: setQty,
