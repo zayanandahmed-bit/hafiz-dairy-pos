@@ -87,6 +87,17 @@ create table if not exists purchases (
   proof_name text
 );
 
+-- General business expenses (rent, utilities, salaries, misc) — "money out"
+-- that ISN'T buying inventory stock (that's what `purchases` already tracks).
+-- Powers the Financials tab's Money In vs Money Out view.
+create table if not exists expenses (
+  id text primary key,
+  date date,
+  category text default '',
+  amount numeric default 0,
+  notes text default ''
+);
+
 create table if not exists sales (
   id text primary key,
   receipt_no integer,
@@ -214,6 +225,7 @@ alter table categories enable row level security;
 alter table suppliers enable row level security;
 alter table cashiers enable row level security;
 alter table purchases enable row level security;
+alter table expenses enable row level security;
 alter table sales enable row level security;
 alter table sale_lines enable row level security;
 alter table refunds enable row level security;
@@ -354,6 +366,14 @@ begin
     from jsonb_array_elements(payload->'purchases') x;
   end if;
 
+  if payload ? 'expenses' then
+    delete from expenses where true;
+    insert into expenses (id, date, category, amount, notes)
+    select x->>'id', nullif(x->>'date','')::date, coalesce(x->>'category',''),
+           coalesce((x->>'amount')::numeric,0), coalesce(x->>'notes','')
+    from jsonb_array_elements(payload->'expenses') x;
+  end if;
+
   if payload ? 'sales' then
     -- TRUNCATE (not DELETE) so this doesn't fire the per-row totals triggers
     -- thousands of times over on a full replace — reset the summary tables
@@ -482,6 +502,10 @@ begin
       'itemId', item_id, 'itemName', item_name, 'qty', qty, 'cost', cost, 'total', total,
       'notes', notes, 'proof', proof_data_url, 'proofName', proof_name
     )) from purchases), '[]'::jsonb),
+
+    'expenses', coalesce((select jsonb_agg(jsonb_build_object(
+      'id', id, 'date', date, 'category', category, 'amount', amount, 'notes', notes
+    )) from expenses), '[]'::jsonb),
 
     'heldSales', coalesce((select jsonb_agg(
       jsonb_build_object(
@@ -861,6 +885,21 @@ begin
 end;
 $$;
 
+create or replace function sync_replace_expenses(expenses jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from expenses where true;
+  insert into expenses (id, date, category, amount, notes)
+  select x->>'id', nullif(x->>'date','')::date, coalesce(x->>'category',''),
+         coalesce((x->>'amount')::numeric,0), coalesce(x->>'notes','')
+  from jsonb_array_elements(expenses) x;
+end;
+$$;
+
 create or replace function sync_replace_held_sales(held_sales jsonb)
 returns void
 language plpgsql
@@ -951,6 +990,7 @@ grant execute on function sync_replace_categories(jsonb) to anon;
 grant execute on function sync_replace_suppliers(jsonb) to anon;
 grant execute on function sync_replace_cashiers(jsonb) to anon;
 grant execute on function sync_replace_purchases(jsonb) to anon;
+grant execute on function sync_replace_expenses(jsonb) to anon;
 grant execute on function sync_replace_held_sales(jsonb) to anon;
 grant execute on function sync_replace_shifts(jsonb) to anon;
 grant execute on function sync_replace_active_shift(jsonb) to anon;

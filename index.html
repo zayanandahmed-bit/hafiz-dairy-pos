@@ -177,6 +177,7 @@
     <button class="nav-btn" data-view="itemCatalog"><span class="nav-icon">🗂️</span> Item Database</button>
     <button class="nav-btn" data-view="purchases"><span class="nav-icon">🚚</span> Purchases</button>
     <button class="nav-btn" data-view="sales"><span class="nav-icon">📈</span> Sales History</button>
+    <button class="nav-btn" data-view="financials"><span class="nav-icon">💰</span> Financials</button>
     <button class="nav-btn" data-view="settings"><span class="nav-icon">⚙️</span> Settings</button>
   </nav>
   <div class="sidebar-foot">All data stored locally in this browser.</div>
@@ -567,6 +568,79 @@
         <span id="salesPageLabel" style="font-size:13px;color:var(--muted);">Page 1 of 1</span>
         <button class="btn secondary small" id="salesNextPageBtn">Next Page →</button>
       </div>
+    </div>
+  </div>
+
+  <!-- FINANCIALS VIEW -->
+  <div class="view" id="view-financials">
+    <div class="panel">
+      <h2>Money In vs Money Out</h2>
+      <div class="row" style="margin-bottom:10px;">
+        <button class="btn secondary small fin-date-tab" data-range="today">Today</button>
+        <button class="btn secondary small fin-date-tab" data-range="week">This Week</button>
+        <button class="btn secondary small fin-date-tab" data-range="month">This Month</button>
+        <button class="btn secondary small fin-date-tab active" data-range="all">All Time</button>
+        <button class="btn secondary small fin-date-tab" data-range="custom">Custom Range</button>
+      </div>
+      <div class="row" id="finCustomRangeBox" style="display:none;">
+        <div><label>From</label><input type="date" id="finCustomFrom"></div>
+        <div><label>To</label><input type="date" id="finCustomTo"></div>
+        <button class="btn small" id="finApplyCustomRangeBtn">Apply</button>
+      </div>
+      <div class="grid grid-3" style="margin-top:14px;">
+        <div class="panel stat-card" style="border-color:var(--green);">
+          <div class="label">Money In (Sales Revenue)</div>
+          <div class="value" id="finMoneyIn">Rs 0</div>
+        </div>
+        <div class="panel stat-card" style="border-color:var(--red);">
+          <div class="label">Money Out (Purchases + Expenses)</div>
+          <div class="value" id="finMoneyOut">Rs 0</div>
+        </div>
+        <div class="panel stat-card" id="finNetCard" style="border-color:var(--blue);">
+          <div class="label">Net Profit / Loss</div>
+          <div class="value" id="finNet">Rs 0</div>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:8px;">Money Out breaks down as: Stock Purchases <span id="finPurchasesOut">Rs 0</span> + Other Expenses <span id="finExpensesOut">Rs 0</span>.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Log an Expense</h2>
+      <p class="hint">For rent, utilities, salaries, and other costs that aren't buying inventory stock (use Purchases for that).</p>
+      <form id="expenseForm">
+        <div class="grid grid-4">
+          <div><label>Date *</label><input type="date" id="expenseDate" required></div>
+          <div>
+            <label>Category *</label>
+            <select id="expenseCategory" required>
+              <option>Rent</option>
+              <option>Utilities</option>
+              <option>Salaries</option>
+              <option>Transport</option>
+              <option>Maintenance</option>
+              <option>Miscellaneous</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div><label>Amount *</label><input type="number" id="expenseAmount" min="0" step="0.01" required></div>
+          <div><label>Notes</label><input id="expenseNotes" placeholder="Optional"></div>
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <button type="submit" class="btn">Log Expense</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="panel">
+      <div class="flex-between">
+        <h2>Expenses (this range)</h2>
+        <span id="expenseSummary" style="font-size:13px;color:var(--muted);"></span>
+      </div>
+      <table>
+        <thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Notes</th><th></th></tr></thead>
+        <tbody id="expenseBody"></tbody>
+      </table>
+      <div id="expenseEmpty" class="empty" style="display:none;">No expenses logged in this range.</div>
     </div>
   </div>
 
@@ -998,6 +1072,7 @@
   var state = {
     items: [],
     itemCatalog: [],
+    expenses: [],
     sales: [],
     categories: [],
     suppliers: [],
@@ -1026,6 +1101,7 @@
 
   function saveItems(){ saveLocalState(); pushDomainInstant("items"); }
   function saveItemCatalog(){ saveLocalState(); pushDomainInstant("itemCatalog"); }
+  function saveExpenses(){ saveLocalState(); pushDomainInstant("expenses"); }
   function saveSales(){ saveLocalState(); }
   function saveCats(){ saveLocalState(); pushDomainInstant("categories"); }
   function saveSettings(){ saveLocalState(); pushDomainInstant("settings"); }
@@ -1052,7 +1128,7 @@
   function saveLocalState(){
     try{
       var snapshot = {
-        items: state.items, itemCatalog: state.itemCatalog, categories: state.categories, suppliers: state.suppliers,
+        items: state.items, itemCatalog: state.itemCatalog, expenses: state.expenses, categories: state.categories, suppliers: state.suppliers,
         purchases: state.purchases, cashiers: state.cashiers, heldSales: state.heldSales,
         shifts: state.shifts, activeShift: state.activeShift, settings: state.settings,
         sales: state.sales, refunds: state.refunds, receiptCounter: state.receiptCounter
@@ -1120,6 +1196,7 @@
     var payload = {
       items: state.items,
       itemCatalog: state.itemCatalog,
+      expenses: state.expenses,
       sales: state.sales,
       categories: state.categories,
       settings: state.settings,
@@ -1243,6 +1320,7 @@
   var DOMAIN_RPC = {
     items: "sync_replace_items",
     itemCatalog: "sync_replace_item_catalog",
+    expenses: "sync_replace_expenses",
     categories: "sync_replace_categories",
     suppliers: "sync_replace_suppliers",
     purchases: "sync_replace_purchases",
@@ -1393,6 +1471,7 @@
     if(data.itemCatalog) {
       state.itemCatalog = data.itemCatalog.map(function(it){ it.barcode = str(it.barcode); return it; });
     }
+    if(data.expenses) { state.expenses = data.expenses; }
     if(data.sales) {
       state.sales = data.sales.map(function(s){
         (s.lines||[]).forEach(function(l){ l.barcode = str(l.barcode); });
@@ -1436,6 +1515,7 @@
     renderCart();
     renderInventory();
     renderItemCatalog();
+    renderFinancials();
     renderSupplierUI();
     populatePurchaseItemSelect();
     renderPurchaseTable();
@@ -1479,6 +1559,7 @@
     itemCatalog: { title: "Item Database", sub: "Premade product catalog — add items into your live Inventory as you stock them" },
     purchases: { title: "Purchases", sub: "Track suppliers and stock-in records with proof of purchase" },
     sales: { title: "Sales History", sub: "Browse and reprint past receipts" },
+    financials: { title: "Financials", sub: "Money in vs money out, and your net profit" },
     settings: { title: "Settings", sub: "Store info, defaults, and data management" }
   };
 
@@ -1496,6 +1577,7 @@
       if(btn.dataset.view === "itemCatalog") renderItemCatalog();
       if(btn.dataset.view === "purchases") renderPurchasesView();
       if(btn.dataset.view === "sales") loadSalesHistoryRange();
+      if(btn.dataset.view === "financials") loadFinancialsRange();
       if(btn.dataset.view === "billing") document.getElementById("scanInput").focus();
       if(btn.dataset.view === "dashboard") loadDashboardRange();
       if(btn.dataset.view === "settings"){ loadSettingsForm(); renderShiftHistory(); }
@@ -3369,6 +3451,98 @@
   });
   document.getElementById("dashApplyCustomRangeBtn").addEventListener("click", loadDashboardRange);
 
+  // ================= FINANCIALS (money in vs money out) =================
+  var finDateRange = "all";
+  var finMoneyIn = 0;
+
+  // Sales revenue for the range comes straight from the server's running
+  // totals (page_size:1 — only totalRevenue/totalCount are used here, not
+  // the actual sale rows, so this stays cheap even for "All Time").
+  function loadFinancialsRange(){
+    fetchSalesRangeByLabel(finDateRange, document.getElementById("finCustomFrom").value, document.getElementById("finCustomTo").value, 1)
+      .then(function(data){
+        finMoneyIn = data.totalRevenue || 0;
+        renderFinancials();
+      })
+      .catch(function(err){ toast("Couldn't load that range: " + err.message); });
+  }
+
+  document.querySelectorAll(".fin-date-tab").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      document.querySelectorAll(".fin-date-tab").forEach(function(b){ b.classList.remove("active"); });
+      btn.classList.add("active");
+      finDateRange = btn.dataset.range;
+      document.getElementById("finCustomRangeBox").style.display = finDateRange === "custom" ? "flex" : "none";
+      if(finDateRange !== "custom") loadFinancialsRange();
+    });
+  });
+  document.getElementById("finApplyCustomRangeBtn").addEventListener("click", loadFinancialsRange);
+
+  function finRangeFilter(dateStr){
+    if(!dateStr) return false;
+    return dateInRange(new Date(dateStr), finDateRange, document.getElementById("finCustomFrom").value, document.getElementById("finCustomTo").value);
+  }
+
+  function renderFinancials(){
+    var fromStr = document.getElementById("finCustomFrom").value;
+    var toStr = document.getElementById("finCustomTo").value;
+
+    var purchasesInRange = state.purchases.filter(function(p){ return finRangeFilter(p.date); });
+    var purchasesTotal = purchasesInRange.reduce(function(s,p){ return s + (p.total||0); }, 0);
+
+    var expensesInRange = state.expenses.filter(function(e){ return finRangeFilter(e.date); })
+      .sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
+    var expensesTotal = expensesInRange.reduce(function(s,e){ return s + (e.amount||0); }, 0);
+
+    var moneyOut = purchasesTotal + expensesTotal;
+    var net = finMoneyIn - moneyOut;
+
+    document.getElementById("finMoneyIn").textContent = money(finMoneyIn);
+    document.getElementById("finMoneyOut").textContent = money(moneyOut);
+    document.getElementById("finNet").textContent = money(net);
+    document.getElementById("finNetCard").style.borderColor = net >= 0 ? "var(--green)" : "var(--red)";
+    document.getElementById("finPurchasesOut").textContent = money(purchasesTotal);
+    document.getElementById("finExpensesOut").textContent = money(expensesTotal);
+
+    var body = document.getElementById("expenseBody");
+    var empty = document.getElementById("expenseEmpty");
+    empty.style.display = expensesInRange.length === 0 ? "block" : "none";
+    document.getElementById("expenseSummary").textContent = expensesInRange.length + " expense(s) · Total: " + money(expensesTotal);
+    body.innerHTML = expensesInRange.map(function(e){
+      return "<tr>" +
+        "<td>" + (e.date||"—") + "</td>" +
+        "<td>" + escapeHtml(e.category||"—") + "</td>" +
+        "<td>" + money(e.amount) + "</td>" +
+        "<td>" + escapeHtml(e.notes||"") + "</td>" +
+        '<td><button class="btn danger small" onclick="POS.deleteExpense(\'' + e.id + '\')">Delete</button></td>' +
+      "</tr>";
+    }).join("");
+  }
+
+  document.getElementById("expenseForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var date = document.getElementById("expenseDate").value;
+    var category = document.getElementById("expenseCategory").value;
+    var amount = parseFloat(document.getElementById("expenseAmount").value);
+    var notes = document.getElementById("expenseNotes").value.trim();
+    if(!date || isNaN(amount) || amount <= 0){ toast("Please fill in all required fields correctly."); return; }
+    state.expenses.push({ id: uid(), date: date, category: category, amount: amount, notes: notes });
+    saveExpenses();
+    document.getElementById("expenseForm").reset();
+    document.getElementById("expenseDate").value = new Date().toISOString().slice(0,10);
+    renderFinancials();
+    toast("Expense logged.");
+  });
+  document.getElementById("expenseDate").value = new Date().toISOString().slice(0,10);
+
+  function deleteExpense(id){
+    if(!confirm("Delete this expense record?")) return;
+    state.expenses = state.expenses.filter(function(e){ return e.id !== id; });
+    saveExpenses();
+    renderFinancials();
+    toast("Expense deleted.");
+  }
+
   function shiftStartInDashRange(shift){
     return dateInRange(new Date(shift.start), dashDateRange, document.getElementById("dashCustomFrom").value, document.getElementById("dashCustomTo").value);
   }
@@ -4146,6 +4320,7 @@
     editItem: editItem,
     deleteItem: deleteItem,
     addCatalogItemToInventory: addCatalogItemToInventory,
+    deleteExpense: deleteExpense,
     addToCart: addToCart,
     changeQty: changeQty,
     setQty: setQty,
