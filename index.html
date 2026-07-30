@@ -3574,9 +3574,32 @@
         "<td>" + escapeHtml(e.category||"—") + "</td>" +
         "<td>" + money(e.amount) + "</td>" +
         "<td>" + escapeHtml(e.notes||"") + "</td>" +
-        '<td><button class="btn danger small" onclick="POS.deleteExpense(\'' + e.id + '\')">Delete</button></td>' +
+        '<td><button class="btn secondary small" onclick="POS.showExpenseReceipt(\'' + e.id + '\')">Receipt</button> ' +
+        '<button class="btn danger small" onclick="POS.deleteExpense(\'' + e.id + '\')">Delete</button></td>' +
       "</tr>";
     }).join("");
+  }
+
+  // Reuses the same receipt-paper modal/print flow as sale receipts —
+  // window.print via the thermal/A4 print window, no separate UI needed.
+  function showExpenseReceipt(id){
+    var e = state.expenses.find(function(x){ return x.id === id; });
+    if(!e) return;
+    var html = "";
+    html += '<div style="text-align:center;font-weight:bold;font-size:14px;">EXPENSE RECEIPT</div>';
+    html += '<div style="text-align:center;">' + escapeHtml(state.settings.storeName || "") + '</div>';
+    html += "<hr>";
+    html += '<div class="rline"><span>Month</span><span>'+(e.period||"—")+'</span></div>';
+    html += '<div class="rline"><span>Date Paid</span><span>'+(e.date||"—")+'</span></div>';
+    html += '<div class="rline"><span>Category</span><span>'+escapeHtml(e.category||"—")+'</span></div>';
+    html += "<hr>";
+    html += '<div class="rline" style="font-weight:bold;font-size:14px;"><span>AMOUNT</span><span>'+money(e.amount)+'</span></div>';
+    html += "<hr>";
+    if(e.notes) html += '<div class="rline"><span>Notes</span><span>'+escapeHtml(e.notes)+'</span></div>';
+    html += '<div style="text-align:center;">Business expense record</div>';
+
+    document.getElementById("receiptContent").innerHTML = html;
+    document.getElementById("receiptModal").classList.add("show");
   }
 
   function defaultPeriodStr(){
@@ -4389,6 +4412,7 @@
     deleteItem: deleteItem,
     addCatalogItemToInventory: addCatalogItemToInventory,
     deleteExpense: deleteExpense,
+    showExpenseReceipt: showExpenseReceipt,
     addToCart: addToCart,
     changeQty: changeQty,
     setQty: setQty,
