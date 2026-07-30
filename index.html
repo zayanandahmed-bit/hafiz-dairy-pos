@@ -450,7 +450,7 @@
         <select id="catalogBrandFilter"><option value="all">All brands</option></select>
       </div>
       <table>
-        <thead><tr><th>Name</th><th>Barcode</th><th>Category</th><th>Brand</th><th>Price</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Barcode</th><th>Category</th><th>Brand</th><th>Suggested Buying Price</th><th>Price</th><th></th></tr></thead>
         <tbody id="catalogBody"></tbody>
       </table>
       <div id="catalogEmpty" class="empty" style="display:none;">No catalog items match your search.</div>
@@ -2499,6 +2499,7 @@
         "<td>" + escapeHtml(it.barcode||"—") + "</td>" +
         "<td>" + escapeHtml(it.category||"—") + "</td>" +
         "<td>" + escapeHtml(it.brand||"—") + "</td>" +
+        "<td>" + (it.cost ? money(it.cost) : "—") + "</td>" +
         "<td>" + money(it.price) + "</td>" +
         "<td>" + actionHtml + "</td>" +
       "</tr>";
