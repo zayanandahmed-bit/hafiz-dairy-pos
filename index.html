@@ -437,11 +437,13 @@
         <span class="hint">Not live inventory — use "Add to Inventory" on an item once you actually stock it.</span>
       </div>
       <div class="filter-bar">
-        <input id="catalogSearch" placeholder="Search by name, barcode, or category...">
+        <input id="catalogSearch" placeholder="Search by name, barcode, category, or brand...">
+        <button class="btn secondary small" id="catalogScanBtn" title="Scan a barcode with your camera">📷 Scan</button>
         <select id="catalogCatFilter"><option value="all">All categories</option></select>
+        <select id="catalogBrandFilter"><option value="all">All brands</option></select>
       </div>
       <table>
-        <thead><tr><th>Name</th><th>Barcode</th><th>Category</th><th>Price</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Barcode</th><th>Category</th><th>Brand</th><th>Price</th><th></th></tr></thead>
         <tbody id="catalogBody"></tbody>
       </table>
       <div id="catalogEmpty" class="empty" style="display:none;">No catalog items match your search.</div>
@@ -479,7 +481,10 @@
           </div>
           <div style="position:relative;">
             <label>Item *</label>
-            <input id="purchaseItemSearch" autocomplete="off" placeholder="Type to search items...">
+            <div style="display:flex;gap:6px;">
+              <input id="purchaseItemSearch" autocomplete="off" placeholder="Type to search items...">
+              <button type="button" class="btn secondary" id="purchaseItemScanBtn" title="Scan a barcode with your camera">📷</button>
+            </div>
             <input type="hidden" id="purchaseItem">
             <div id="purchaseItemDropdown" class="combo-dropdown" style="display:none;"></div>
           </div>
@@ -2102,6 +2107,20 @@
       document.getElementById("purchaseItemDropdown").style.display = "none";
     }
   });
+  document.getElementById("purchaseItemScanBtn").addEventListener("click", function(){
+    openCameraScanner(function(value){
+      var match = state.items.find(function(it){ return it.barcode === value; });
+      if(match){
+        selectPurchaseItem(match.id);
+        toast("Found: " + match.name);
+      } else {
+        document.getElementById("purchaseItemSearch").value = value;
+        document.getElementById("purchaseItem").value = "";
+        renderPurchaseItemDropdown(filterPurchaseItems(value));
+        toast("No inventory item matches that barcode.");
+      }
+    });
+  });
 
   var pendingProofDataUrl = null;
   var pendingProofName = null;
@@ -2290,21 +2309,32 @@
       cats.map(function(c){ return "<option value='" + escapeHtml(c) + "'>" + escapeHtml(c) + "</option>"; }).join("");
     if(cats.indexOf(current) !== -1) sel.value = current;
   }
+  function populateCatalogBrandFilter(){
+    var sel = document.getElementById("catalogBrandFilter");
+    var current = sel.value;
+    var brands = Array.from(new Set(state.itemCatalog.map(function(it){ return it.brand || ""; }).filter(Boolean))).sort();
+    sel.innerHTML = "<option value='all'>All brands</option>" +
+      brands.map(function(b){ return "<option value='" + escapeHtml(b) + "'>" + escapeHtml(b) + "</option>"; }).join("");
+    if(brands.indexOf(current) !== -1) sel.value = current;
+  }
 
   function renderItemCatalog(){
     populateCatalogCatFilter();
+    populateCatalogBrandFilter();
     var q = document.getElementById("catalogSearch").value.trim().toLowerCase();
     var catFilter = document.getElementById("catalogCatFilter").value;
+    var brandFilter = document.getElementById("catalogBrandFilter").value;
     var inventoryBarcodes = {};
     state.items.forEach(function(it){ if(it.barcode) inventoryBarcodes[it.barcode] = true; });
 
     var list = state.itemCatalog.filter(function(it){
       if(q){
         // Case-insensitive: everything is already lowercased via .toLowerCase() on both sides.
-        var hay = (it.name + " " + (it.barcode||"") + " " + (it.category||"")).toLowerCase();
+        var hay = (it.name + " " + (it.barcode||"") + " " + (it.category||"") + " " + (it.brand||"")).toLowerCase();
         if(hay.indexOf(q) === -1) return false;
       }
       if(catFilter !== "all" && (it.category || "Uncategorized") !== catFilter) return false;
+      if(brandFilter !== "all" && (it.brand || "") !== brandFilter) return false;
       return true;
     });
 
@@ -2330,6 +2360,7 @@
         "<td>" + escapeHtml(it.name) + "</td>" +
         "<td>" + escapeHtml(it.barcode||"—") + "</td>" +
         "<td>" + escapeHtml(it.category||"—") + "</td>" +
+        "<td>" + escapeHtml(it.brand||"—") + "</td>" +
         "<td>" + money(it.price) + "</td>" +
         "<td>" + actionHtml + "</td>" +
       "</tr>";
@@ -2337,8 +2368,16 @@
   }
   document.getElementById("catalogSearch").addEventListener("input", function(){ catalogPageNumber = 1; renderItemCatalog(); });
   document.getElementById("catalogCatFilter").addEventListener("change", function(){ catalogPageNumber = 1; renderItemCatalog(); });
+  document.getElementById("catalogBrandFilter").addEventListener("change", function(){ catalogPageNumber = 1; renderItemCatalog(); });
   document.getElementById("catalogNextPageBtn").addEventListener("click", function(){ catalogPageNumber++; renderItemCatalog(); });
   document.getElementById("catalogPrevPageBtn").addEventListener("click", function(){ catalogPageNumber--; renderItemCatalog(); });
+  document.getElementById("catalogScanBtn").addEventListener("click", function(){
+    openCameraScanner(function(value){
+      document.getElementById("catalogSearch").value = value;
+      catalogPageNumber = 1;
+      renderItemCatalog();
+    });
+  });
 
   // Copies a catalog entry into the live items table (stock starts at 0 —
   // the owner records an actual Purchase afterward to bring stock in).

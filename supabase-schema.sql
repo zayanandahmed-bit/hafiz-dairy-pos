@@ -46,10 +46,14 @@ create table if not exists item_catalog (
   name text not null,
   barcode text default '',
   category text default '',
+  brand text default '',
   price numeric default 0,
   unit text default '',
   low_stock numeric default 0
 );
+
+-- Safe to re-run — no-op if the column already exists.
+alter table item_catalog add column if not exists brand text default '';
 
 create table if not exists categories (
   name text primary key
@@ -313,8 +317,8 @@ begin
 
   if payload ? 'itemCatalog' then
     delete from item_catalog where true;
-    insert into item_catalog (id, name, barcode, category, price, unit, low_stock)
-    select x->>'id', x->>'name', coalesce(x->>'barcode',''), coalesce(x->>'category',''),
+    insert into item_catalog (id, name, barcode, category, brand, price, unit, low_stock)
+    select x->>'id', x->>'name', coalesce(x->>'barcode',''), coalesce(x->>'category',''), coalesce(x->>'brand',''),
            coalesce((x->>'price')::numeric,0), coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0)
     from jsonb_array_elements(payload->'itemCatalog') x;
   end if;
@@ -459,7 +463,7 @@ begin
     )) from items), '[]'::jsonb),
 
     'itemCatalog', coalesce((select jsonb_agg(jsonb_build_object(
-      'id', id, 'name', name, 'barcode', barcode, 'category', category,
+      'id', id, 'name', name, 'barcode', barcode, 'category', category, 'brand', brand,
       'price', price, 'unit', unit, 'lowStock', low_stock
     )) from item_catalog), '[]'::jsonb),
 
@@ -791,8 +795,8 @@ set search_path = public
 as $$
 begin
   delete from item_catalog where true;
-  insert into item_catalog (id, name, barcode, category, price, unit, low_stock)
-  select x->>'id', x->>'name', coalesce(x->>'barcode',''), coalesce(x->>'category',''),
+  insert into item_catalog (id, name, barcode, category, brand, price, unit, low_stock)
+  select x->>'id', x->>'name', coalesce(x->>'barcode',''), coalesce(x->>'category',''), coalesce(x->>'brand',''),
          coalesce((x->>'price')::numeric,0), coalesce(x->>'unit',''), coalesce((x->>'lowStock')::numeric,0)
   from jsonb_array_elements("itemCatalog") x;
 end;
