@@ -1008,6 +1008,10 @@
     }).then(function(ok){
       if(ok){
         lockScreen.style.display = "none";
+        // The cloud data fetch itself was firing on page load regardless of
+        // this screen — anyone could see it in DevTools' Network tab without
+        // ever entering a password. It now waits for this exact moment.
+        if(window.__startCloudPull) window.__startCloudPull();
       } else {
         lockError.textContent = "Incorrect username or password.";
         lockInput.value = "";
@@ -4363,38 +4367,46 @@
   renderShiftHistory();
   loadSettingsForm();
 
-  // Local cache loads first (instant, works offline), then retry anything
-  // that didn't make it to the cloud last time this device was open.
+  // Local cache loads first (instant, works offline) — this is just this
+  // device's own localStorage, no network call, so it doesn't leak anything
+  // to anyone inspecting the page before login.
   var hadLocalData = loadLocalState();
-  flushAllDirty();
 
-  if(cloudReady()){
-    cloudPullAll().then(function(data){
-      // Every domain the cloud has gets applied UNLESS this device has an
-      // unconfirmed local change still pending for it — that keeps a fresh
-      // edit from being overwritten by stale cloud data while its push is
-      // still in flight/retrying. Sales/refunds aren't part of this pull at
-      // all (see sync_pull) — they're fetched on demand by whichever range
-      // Dashboard/Sales History is opened to; only a still-unconfirmed
-      // sale/refund from last session (stuck in the pending queue) shows up
-      // here in the meantime, until it's flushed.
-      var merged = {};
-      Object.keys(data).forEach(function(k){
-        if(dirtyDomains[k]) return;
-        merged[k] = data[k];
+  // The actual cloud fetch (and retrying anything unsynced from last time)
+  // is deliberately held back until the login screen confirms a real
+  // username/password — see verify_app_login's success handler above, which
+  // calls window.__startCloudPull(). Before that, no Supabase request goes
+  // out, so there's nothing for someone to see in DevTools' Network tab.
+  window.__startCloudPull = function(){
+    flushAllDirty();
+    if(cloudReady()){
+      cloudPullAll().then(function(data){
+        // Every domain the cloud has gets applied UNLESS this device has an
+        // unconfirmed local change still pending for it — that keeps a fresh
+        // edit from being overwritten by stale cloud data while its push is
+        // still in flight/retrying. Sales/refunds aren't part of this pull at
+        // all (see sync_pull) — they're fetched on demand by whichever range
+        // Dashboard/Sales History is opened to; only a still-unconfirmed
+        // sale/refund from last session (stuck in the pending queue) shows up
+        // here in the meantime, until it's flushed.
+        var merged = {};
+        Object.keys(data).forEach(function(k){
+          if(dirtyDomains[k]) return;
+          merged[k] = data[k];
+        });
+        applyCloudData(merged);
+        if(pendingQueue.sales.length || pendingQueue.refunds.length){
+          state.sales = pendingQueue.sales.map(function(p){ return p.sale; });
+          state.refunds = pendingQueue.refunds.slice();
+        }
+        if(!hadLocalData) toast("Synced with cloud.");
+      }).catch(function(err){
+        toast("Couldn't reach the database — check your internet connection: " + err.message);
       });
-      applyCloudData(merged);
-      if(pendingQueue.sales.length || pendingQueue.refunds.length){
-        state.sales = pendingQueue.sales.map(function(p){ return p.sale; });
-        state.refunds = pendingQueue.refunds.slice();
-      }
-      if(!hadLocalData) toast("Synced with cloud.");
-    }).catch(function(err){
-      toast("Couldn't reach the database — check your internet connection: " + err.message);
-    });
-  } else {
-    toast("Cloud Sync isn't configured — this app has no other place to store data.");
-  }
+    } else {
+      toast("Cloud Sync isn't configured — this app has no other place to store data.");
+    }
+  };
 })();
 </script>
 </body>
