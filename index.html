@@ -571,6 +571,13 @@
         <h2 data-i18n="purchaseHistory">Purchase History</h2>
         <span id="purchaseSummary" style="font-size:13px;color:var(--muted);"></span>
       </div>
+      <div class="filter-bar">
+        <div><label data-i18n="from">From</label><input type="date" id="purchaseFilterFrom"></div>
+        <div><label data-i18n="to">To</label><input type="date" id="purchaseFilterTo"></div>
+        <button class="btn secondary small" id="purchaseFilterApplyBtn" data-i18n="apply" style="align-self:flex-end;">Apply</button>
+        <button class="btn secondary small" id="purchaseFilterClearBtn" data-i18n="clearFilter" style="align-self:flex-end;">Clear</button>
+        <button class="btn secondary small" id="exportPurchasesPdfBtn" data-i18n="exportPdf" style="align-self:flex-end;">📄 Export PDF</button>
+      </div>
       <table>
         <thead><tr><th data-i18n="date">Date</th><th data-i18n="supplier">Supplier</th><th data-i18n="item">Item</th><th data-i18n="qty">Qty</th><th data-i18n="costPerUnit">Cost/Unit</th><th data-i18n="total">Total</th><th data-i18n="proof">Proof</th><th data-i18n="notes">Notes</th><th></th></tr></thead>
         <tbody id="purchaseBody"></tbody>
@@ -637,6 +644,7 @@
       </div>
       <div class="filter-bar">
         <input id="salesSearch" placeholder="Search by receipt # or customer..." data-i18n-placeholder="searchByReceiptCustomer">
+        <button class="btn secondary small" id="exportSalesPdfBtn" data-i18n="exportPdf">📄 Export PDF</button>
         <button class="btn secondary small" id="clearHistoryBtn" data-i18n="clearHistory">Clear History</button>
       </div>
       <table>
@@ -1738,6 +1746,7 @@
     qtyPurchasedRequired: "خریدی گئی مقدار *", costPerUnitRequired: "فی یونٹ لاگت *", proofOfPurchase: "خریداری کا ثبوت (رسید / انوائس تصویر)",
     remove: "ہٹائیں", notes: "نوٹس", addQtyToStockAuto: "یہ مقدار خودکار طور پر موجودہ اسٹاک میں شامل کریں",
     recordPurchaseBtn: "خریداری ریکارڈ کریں", purchaseHistory: "خریداری کی تاریخ", date: "تاریخ", supplier: "سپلائر",
+    exportPdf: "📄 پی ڈی ایف ایکسپورٹ کریں", clearFilter: "صاف کریں",
     costPerUnit: "فی یونٹ لاگت", proof: "ثبوت", noPurchasesYet: "ابھی تک کوئی خریداری ریکارڈ نہیں ہوئی۔",
     addCustomer: "گاہک شامل کریں", nameRequired: "نام *", phone: "فون",
     customers: "گاہک", totalOutstanding: "کل بقایا:", searchByNamePhone: "نام یا فون سے تلاش کریں...",
@@ -2696,7 +2705,11 @@
   function renderPurchaseTable(){
     var body = document.getElementById("purchaseBody");
     var empty = document.getElementById("purchaseEmpty");
-    var sorted = state.purchases.slice().sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
+    var bounds = getPurchaseFilterBounds();
+    var inRange = (bounds.from || bounds.to)
+      ? state.purchases.filter(function(p){ return purchaseInFilter(p.date, bounds); })
+      : state.purchases;
+    var sorted = inRange.slice().sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
     empty.style.display = sorted.length === 0 ? "block" : "none";
 
     var totalPages = Math.max(1, Math.ceil(sorted.length / PURCHASES_PAGE_SIZE));
@@ -2704,7 +2717,7 @@
     if(purchasePageNumber < 1) purchasePageNumber = 1;
     var pageItems = sorted.slice((purchasePageNumber-1)*PURCHASES_PAGE_SIZE, purchasePageNumber*PURCHASES_PAGE_SIZE);
 
-    var totalSpent = state.purchases.reduce(function(s,p){ return s+p.total; }, 0);
+    var totalSpent = inRange.reduce(function(s,p){ return s+p.total; }, 0);
     document.getElementById("purchaseSummary").textContent = sorted.length + " purchase(s) · Total spent: " + money(totalSpent);
     document.getElementById("purchasePageLabel").textContent = "Page " + purchasePageNumber + " of " + totalPages;
     document.getElementById("purchasePrevPageBtn").disabled = purchasePageNumber <= 1;
@@ -4672,6 +4685,290 @@
 
     return doc;
   }
+
+  // ================= SALES HISTORY: PDF EXPORT =================
+  function fetchSalesForRangeExport(bounds){
+    var allSales = [];
+    var lastRefunds = [];
+    var PAGE = 3000;
+    function nextPage(cursorDate, cursorId){
+      return fetchSalesRangeRaw(bounds.start, bounds.end, PAGE, cursorDate, cursorId).then(function(data){
+        var page = data.sales || [];
+        allSales = allSales.concat(page);
+        lastRefunds = data.refunds || lastRefunds;
+        if(!data.hasMore || page.length === 0){
+          return { sales: allSales, refunds: lastRefunds };
+        }
+        var oldest = page[page.length - 1];
+        return nextPage(oldest.date, oldest.id);
+      });
+    }
+    return nextPage(null, null);
+  }
+
+  function buildSalesReportData(sales, refunds, rangeLabel){
+    var revenue = sales.reduce(function(s,x){ return s + x.grand; }, 0);
+    var cash = 0, card = 0, wallet = 0, credit = 0;
+    sales.forEach(function(s){
+      if(s.payment === "Cash") cash += s.grand;
+      else if(s.payment === "Card") card += s.grand;
+      else if(s.payment === "Credit (Udhaar)") credit += s.grand;
+      else wallet += s.grand;
+    });
+    var refundTotal = refunds.reduce(function(s,r){ return s + r.total; }, 0);
+    var sorted = sales.slice().sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
+    return {
+      storeName: state.settings.storeName || "Store",
+      rangeLabel: rangeLabel,
+      generatedLabel: new Date().toLocaleString(),
+      revenue: revenue, transactions: sales.length,
+      cash: cash, card: card, wallet: wallet, credit: credit,
+      refundTotal: refundTotal, refundCount: refunds.length,
+      rows: sorted
+    };
+  }
+
+  function renderSalesReportPdf(data){
+    var doc = new jspdf.jsPDF({ unit: "pt", format: "a4" });
+    var pageWidth = doc.internal.pageSize.getWidth();
+    var pageHeight = doc.internal.pageSize.getHeight();
+    var marginX = 40;
+    var contentWidth = pageWidth - marginX * 2;
+
+    doc.setFillColor.apply(doc, REPORT_COLORS.primary);
+    doc.rect(0, 0, pageWidth, 82, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.text(data.storeName, marginX, 36);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text("Sales Report", marginX, 56);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text(data.rangeLabel, pageWidth - marginX, 36, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text("Generated at " + data.generatedLabel, pageWidth - marginX, 52, { align: "right" });
+
+    var y = 112;
+    y = sectionTitle(doc, "Summary", y, marginX, pageWidth);
+    var summaryRows = [
+      ["Total Revenue", money(data.revenue)],
+      ["Total Transactions", String(data.transactions)],
+      ["Cash", money(data.cash)],
+      ["Card", money(data.card)],
+      ["Mobile Wallet", money(data.wallet)],
+      ["Credit (Udhaar)", money(data.credit)]
+    ];
+    if(data.refundTotal > 0) summaryRows.push(["Refunds Issued", money(data.refundTotal) + " (" + data.refundCount + ")"]);
+    doc.autoTable({
+      startY: y,
+      margin: { left: marginX, right: marginX },
+      head: [["Metric", "Value"]],
+      body: summaryRows,
+      theme: "grid",
+      styles: { font: "helvetica", fontSize: 10, textColor: REPORT_COLORS.text, cellPadding: 6, lineColor: REPORT_COLORS.border },
+      headStyles: { fillColor: REPORT_COLORS.primary, textColor: 255, fontStyle: "bold" },
+      columnStyles: { 0: { cellWidth: contentWidth * 0.6 }, 1: { cellWidth: contentWidth * 0.4, halign: "right" } }
+    });
+    y = doc.lastAutoTable.finalY + 34;
+
+    y = sectionTitle(doc, "Transactions", y, marginX, pageWidth);
+    if(data.rows.length === 0){
+      y = emptyNote(doc, "No sales in this range.", y, marginX);
+    } else {
+      doc.autoTable({
+        startY: y,
+        margin: { left: marginX, right: marginX },
+        head: [["Receipt #", "Date/Time", "Customer", "Cashier", "Payment", "Total"]],
+        body: data.rows.map(function(s){
+          var d = new Date(s.date);
+          return [String(s.receiptNo), d.toLocaleString(), s.customer || "—", s.cashier || "—", s.payment || "—", money(s.grand)];
+        }),
+        theme: "grid",
+        styles: { font: "helvetica", fontSize: 9, textColor: REPORT_COLORS.text, cellPadding: 5, lineColor: REPORT_COLORS.border },
+        headStyles: { fillColor: REPORT_COLORS.primary, textColor: 255, fontStyle: "bold" },
+        columnStyles: { 5: { halign: "right" } }
+      });
+    }
+
+    var pageCount = doc.internal.getNumberOfPages();
+    for(var i = 1; i <= pageCount; i++){
+      doc.setPage(i);
+      doc.setDrawColor.apply(doc, REPORT_COLORS.border);
+      doc.setLineWidth(0.5);
+      doc.line(marginX, pageHeight - 34, pageWidth - marginX, pageHeight - 34);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor.apply(doc, REPORT_COLORS.muted);
+      doc.text(data.storeName + " POS — Sales Report", marginX, pageHeight - 20);
+      doc.text("Page " + i + " of " + pageCount, pageWidth - marginX, pageHeight - 20, { align: "right" });
+    }
+    return doc;
+  }
+
+  document.getElementById("exportSalesPdfBtn").addEventListener("click", function(){
+    var fromStr = document.getElementById("customFrom").value;
+    var toStr = document.getElementById("customTo").value;
+    var bounds = computeRangeBounds(currentDateRange, fromStr, toStr);
+    var rangeLabel = currentDateRange === "custom"
+      ? ((fromStr || "…") + " to " + (toStr || "…"))
+      : RANGE_LABELS[currentDateRange];
+    toast("Gathering sales for the report…");
+    fetchSalesForRangeExport(bounds).then(function(result){
+      var sales = result.sales.map(function(s){ (s.lines||[]).forEach(function(l){ l.barcode = str(l.barcode); }); return s; });
+      var data = buildSalesReportData(sales, result.refunds || [], rangeLabel);
+      var doc = renderSalesReportPdf(data);
+      doc.save("sales-report-" + new Date().toISOString().slice(0,10) + ".pdf");
+      toast("Sales report downloaded.");
+    }).catch(function(err){
+      toast("Couldn't build the report: " + err.message);
+    });
+  });
+
+  // ================= PURCHASES: DATE FILTER + PDF EXPORT =================
+  function getPurchaseFilterBounds(){
+    var from = document.getElementById("purchaseFilterFrom").value;
+    var to = document.getElementById("purchaseFilterTo").value;
+    return { from: from || null, to: to || null };
+  }
+  function purchaseInFilter(dateStr, bounds){
+    if(!dateStr) return false;
+    if(bounds.from && dateStr < bounds.from) return false;
+    if(bounds.to && dateStr > bounds.to) return false;
+    return true;
+  }
+
+  document.getElementById("purchaseFilterApplyBtn").addEventListener("click", function(){
+    purchasePageNumber = 1;
+    renderPurchaseTable();
+  });
+  document.getElementById("purchaseFilterClearBtn").addEventListener("click", function(){
+    document.getElementById("purchaseFilterFrom").value = "";
+    document.getElementById("purchaseFilterTo").value = "";
+    purchasePageNumber = 1;
+    renderPurchaseTable();
+  });
+
+  function buildPurchasesReportData(purchases, rangeLabel){
+    var totalSpent = purchases.reduce(function(s,p){ return s + p.total; }, 0);
+    var bySupplier = {};
+    purchases.forEach(function(p){
+      if(!bySupplier[p.supplierName]) bySupplier[p.supplierName] = { count: 0, total: 0 };
+      bySupplier[p.supplierName].count++;
+      bySupplier[p.supplierName].total += p.total;
+    });
+    var supplierRows = Object.keys(bySupplier).map(function(name){
+      return { name: name, count: bySupplier[name].count, total: bySupplier[name].total };
+    }).sort(function(a,b){ return b.total - a.total; });
+    var sorted = purchases.slice().sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
+    return {
+      storeName: state.settings.storeName || "Store",
+      rangeLabel: rangeLabel,
+      generatedLabel: new Date().toLocaleString(),
+      totalSpent: totalSpent, count: purchases.length,
+      supplierRows: supplierRows,
+      rows: sorted
+    };
+  }
+
+  function renderPurchasesReportPdf(data){
+    var doc = new jspdf.jsPDF({ unit: "pt", format: "a4" });
+    var pageWidth = doc.internal.pageSize.getWidth();
+    var pageHeight = doc.internal.pageSize.getHeight();
+    var marginX = 40;
+    var contentWidth = pageWidth - marginX * 2;
+
+    doc.setFillColor.apply(doc, REPORT_COLORS.primary);
+    doc.rect(0, 0, pageWidth, 82, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.text(data.storeName, marginX, 36);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text("Purchases Report", marginX, 56);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text(data.rangeLabel, pageWidth - marginX, 36, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text("Generated at " + data.generatedLabel, pageWidth - marginX, 52, { align: "right" });
+
+    var y = 112;
+    y = sectionTitle(doc, "Summary", y, marginX, pageWidth);
+    doc.autoTable({
+      startY: y,
+      margin: { left: marginX, right: marginX },
+      head: [["Metric", "Value"]],
+      body: [["Total Spent", money(data.totalSpent)], ["Total Purchases", String(data.count)]],
+      theme: "grid",
+      styles: { font: "helvetica", fontSize: 10, textColor: REPORT_COLORS.text, cellPadding: 6, lineColor: REPORT_COLORS.border },
+      headStyles: { fillColor: REPORT_COLORS.primary, textColor: 255, fontStyle: "bold" },
+      columnStyles: { 0: { cellWidth: contentWidth * 0.6 }, 1: { cellWidth: contentWidth * 0.4, halign: "right" } }
+    });
+    y = doc.lastAutoTable.finalY + 34;
+
+    y = sectionTitle(doc, "By Supplier", y, marginX, pageWidth);
+    if(data.supplierRows.length === 0){
+      y = emptyNote(doc, "No purchases in this range.", y, marginX);
+    } else {
+      doc.autoTable({
+        startY: y,
+        margin: { left: marginX, right: marginX },
+        head: [["Supplier", "Purchases", "Total Spent"]],
+        body: data.supplierRows.map(function(r){ return [r.name, String(r.count), money(r.total)]; }),
+        theme: "grid",
+        styles: { font: "helvetica", fontSize: 10, textColor: REPORT_COLORS.text, cellPadding: 6, lineColor: REPORT_COLORS.border },
+        headStyles: { fillColor: REPORT_COLORS.primary, textColor: 255, fontStyle: "bold" },
+        columnStyles: { 1: { halign: "right" }, 2: { halign: "right" } }
+      });
+      y = doc.lastAutoTable.finalY + 34;
+    }
+
+    y = sectionTitle(doc, "Purchase Details", y, marginX, pageWidth);
+    if(data.rows.length === 0){
+      y = emptyNote(doc, "No purchases in this range.", y, marginX);
+    } else {
+      doc.autoTable({
+        startY: y,
+        margin: { left: marginX, right: marginX },
+        head: [["Date", "Supplier", "Item", "Qty", "Cost/Unit", "Total", "Notes"]],
+        body: data.rows.map(function(p){
+          return [p.date, p.supplierName, p.itemName, String(p.qty), money(p.cost), money(p.total), p.notes || ""];
+        }),
+        theme: "grid",
+        styles: { font: "helvetica", fontSize: 9, textColor: REPORT_COLORS.text, cellPadding: 5, lineColor: REPORT_COLORS.border },
+        headStyles: { fillColor: REPORT_COLORS.primary, textColor: 255, fontStyle: "bold" },
+        columnStyles: { 3: { halign: "right" }, 4: { halign: "right" }, 5: { halign: "right" } }
+      });
+    }
+
+    var pageCount = doc.internal.getNumberOfPages();
+    for(var i = 1; i <= pageCount; i++){
+      doc.setPage(i);
+      doc.setDrawColor.apply(doc, REPORT_COLORS.border);
+      doc.setLineWidth(0.5);
+      doc.line(marginX, pageHeight - 34, pageWidth - marginX, pageHeight - 34);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor.apply(doc, REPORT_COLORS.muted);
+      doc.text(data.storeName + " POS — Purchases Report", marginX, pageHeight - 20);
+      doc.text("Page " + i + " of " + pageCount, pageWidth - marginX, pageHeight - 20, { align: "right" });
+    }
+    return doc;
+  }
+
+  document.getElementById("exportPurchasesPdfBtn").addEventListener("click", function(){
+    var bounds = getPurchaseFilterBounds();
+    var filtered = state.purchases.filter(function(p){ return purchaseInFilter(p.date, bounds); });
+    var rangeLabel = (bounds.from || bounds.to) ? ((bounds.from || "…") + " to " + (bounds.to || "…")) : "All Time";
+    var data = buildPurchasesReportData(filtered, rangeLabel);
+    var doc = renderPurchasesReportPdf(data);
+    doc.save("purchases-report-" + new Date().toISOString().slice(0,10) + ".pdf");
+    toast("Purchases report downloaded.");
+  });
 
   document.getElementById("emailReportBtn").addEventListener("click", function(){
     var now = new Date();
