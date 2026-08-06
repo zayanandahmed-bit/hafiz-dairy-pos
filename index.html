@@ -158,7 +158,7 @@
 <div id="lockScreen">
   <div class="lock-card">
     <div class="lock-icon">🛒</div>
-    <h1>Hafiz Dairy</h1>
+    <h1 id="lockStoreName">Hafiz Dairy</h1>
     <p>Log in to open the POS system.</p>
     <input type="text" id="lockUsernameInput" placeholder="Username" autocomplete="username" style="margin-bottom:10px;">
     <input type="password" id="lockPasswordInput" placeholder="Password" autocomplete="current-password">
@@ -1634,11 +1634,22 @@
     refreshEverything();
   }
 
+  // Single source of truth for anywhere the store name is displayed chrome-side
+  // (sidebar brand, lock screen, browser tab title) — so renaming a client is
+  // just editing Settings -> Store Name, no code changes needed anywhere.
+  function applyStoreName(){
+    var name = state.settings.storeName || "Store";
+    document.getElementById("sbStoreName").textContent = name;
+    var lockEl = document.getElementById("lockStoreName");
+    if (lockEl) lockEl.textContent = name;
+    document.title = name + " — POS System";
+  }
+
   function refreshEverything(){
     applyTheme();
     applyFontSize();
     applyLanguage();
-    document.getElementById("sbStoreName").textContent = state.settings.storeName;
+    applyStoreName();
     document.getElementById("discountInput").value = state.settings.defaultDiscount;
     document.getElementById("taxInput").value = state.settings.defaultTax;
     updateCashierLabel();
@@ -5026,7 +5037,7 @@
     saveSettings();
     applyTheme();
     applyFontSize();
-    document.getElementById("sbStoreName").textContent = state.settings.storeName;
+    applyStoreName();
     document.getElementById("discountInput").value = state.settings.defaultDiscount;
     document.getElementById("taxInput").value = state.settings.defaultTax;
     renderCart();
@@ -5262,7 +5273,7 @@
         loadSettingsForm();
         renderInventory(); renderSales(); renderDashboard(); renderCart(); renderPurchasesView();
         renderCashierUI(); updateCashierLabel(); updateHeldCount(); renderShiftHistory();
-        document.getElementById("sbStoreName").textContent = state.settings.storeName;
+        applyStoreName();
         toast("Backup imported — pushing everything to the cloud…");
         doCloudPushNow().then(function(){
           toast("Backup imported and saved to the cloud.");
@@ -5316,7 +5327,7 @@
   // hydrates it with the real data. No demo/sample data is ever invented
   // here; an empty database just stays empty until you add real items.
   applyTheme();
-  document.getElementById("sbStoreName").textContent = state.settings.storeName;
+  applyStoreName();
   document.getElementById("discountInput").value = state.settings.defaultDiscount;
   document.getElementById("taxInput").value = state.settings.defaultTax;
   document.getElementById("purchaseDate").value = new Date().toISOString().slice(0,10);
